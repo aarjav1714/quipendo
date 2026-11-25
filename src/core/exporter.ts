@@ -103,6 +103,20 @@ export type ExportEvent =
   | { type: 'throttle'; waitMs: number; reason: string }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; message: string };
 
+/** One document converted for a look, not saved. */
+export interface Preview {
+  title: string;
+  type: ThreadMeta['type'];
+  /** The whole note, front matter included, as an export would save it. */
+  markdown: string;
+  warnings: Warning[];
+}
+
+const PREVIEW_PLACEHOLDERS = {
+  image: (label: string): string => `*[image${label ? `: ${label}` : ''}]*`,
+  file: (label: string): string => `${label || 'attachment'} *(attachment, saved by a full export)*`,
+};
+
 export interface ExportDeps {
   client: QuipApi;
   sink: Sink;
@@ -349,6 +363,8 @@ export class Exporter {
   private attachments = { saved: 0, reused: 0, missing: 0 };
   private commentCount = 0;
   private editHistorySaved = 0;
+  /** Set while a document is being converted for a preview: no attachments are downloaded and nothing is written. */
+  private previewMode = false;
   private pauses = 0;
   private attachmentsRoot = '';
   private unfiledRoot = '';
@@ -971,6 +987,45 @@ export class Exporter {
   }
 
   /**
+   * Converts one document to Markdown, as an export would write it, without writing anything and without
+   * downloading attachments, so that a person can see the result before exporting. Needs no folder.
+   */
+  async preview(idOrSecret: string): Promise<Preview> {
+    const { client } = this.deps;
+    const found = await client.getThread(idOrSecret);
+    if (!found.ok) throw new QuipHttpError(found.status, `/2/threads/${idOrSecret}`, found.message);
+    const meta = found.value;
+    if (meta.type === 'chat') throw new Error('That is a chat, which cannot be exported.');
+    const t: PlannedThread = { meta, raw: found.raw, folderPath: '', alsoIn: [], path: 'Preview.md' };
+    if (meta.authorId) for (const [id, name] of await client.getUsers([meta.authorId])) this.users.set(id, name);
+
+    const warnings: Warning[] = [];
+    const embeds: Record<string, number> = {};
+    const flags: Flags = { retry: false, files: new Set(), sidecars: new Set() };
+    const linkLog: LinkLog = { links: {}, unresolved: new Set() };
+    this.previewMode = true;
+    try {
+      let body: string;
+      let comments = '';
+      if (meta.type === 'slides') {
+        body = `# ${escapeInline(meta.title.trim() || 'Untitled')}\n\n> Quip slide decks cannot be converted to Markdown. A full export saves a PDF copy next to the note.`;
+      } else {
+        const rawHtml = await client.getThreadHtml(meta.id);
+        if (rawHtml.trim() === '') warnings.push({ code: 'empty-html', detail: 'Quip returned no content (often a permissions issue)' });
+        let messages: QuipMessage[] = [];
+        if (this.opts.includeComments) messages = (await client.getMessages(meta.id)).messages;
+        const plan = this.opts.includeComments && this.opts.anchorComments ? planAnchors(messages) : undefined;
+        const converted = await this.convert(t, rawHtml, warnings, embeds, flags, linkLog, plan?.labels);
+        body = converted.markdown;
+        if (this.opts.includeComments) comments = await this.renderComments(t, messages, warnings, flags, linkLog, plan, new Set(converted.placedAnchors));
+      }
+      return { title: meta.title.trim() || 'Untitled', type: meta.type, markdown: this.composeNote(t, body, [], comments, embeds), warnings };
+    } finally {
+      this.previewMode = false;
+    }
+  }
+
+  /**
    * Just before a note is written, checks once more that the file at its path is still what this tool wrote
    * (the folder may have changed since the scan, the user may have edited the note since the last export, or
    * another run may be writing). If not, the file is left alone and the note moves to a free name.
@@ -1040,6 +1095,7 @@ export class Exporter {
       isUser: (id) => this.users.has(id),
       originalUrl: (key) => result.docUrls[key],
       siteUrl: this.siteUrl,
+      ...(this.previewMode ? { placeholders: PREVIEW_PLACEHOLDERS } : {}),
     });
     for (const key of result.docLinks) {
       const target = this.findDoc(key)?.path ?? earlier.get(key);
@@ -1150,6 +1206,7 @@ export class Exporter {
   // ---- attachments -----------------------------------------------------
 
   private async ensureBlob(ref: BlobRef, warnings: Warning[], flags: Flags): Promise<string | null> {
+    if (this.previewMode) return null;
     const key = `${ref.threadId}/${ref.blobId}`;
     const cached = this.blobPaths.get(key);
     if (cached !== undefined) {
@@ -1230,7 +1287,7 @@ export class Exporter {
     for (const file of m.files) {
       const path = await this.ensureBlob({ threadId: t.meta.id, blobId: file.hash, kind: 'file', ...(file.name ? { hint: file.name } : {}) }, warnings, flags);
       const label = escapeInline(file.name || 'attachment');
-      body.push(path ? `📎 [${label}](${relativeLink(t.path, path)})` : `📎 ${label} *(attachment unavailable)*`);
+      body.push(path ? `📎 [${label}](${relativeLink(t.path, path)})` : `📎 ${label} *(${this.previewMode ? 'attachment, saved by a full export' : 'attachment unavailable'})*`);
     }
     return { header: `**${escapeInline(who)}**${when ? ` · ${when} UTC` : ''}`, body };
   }

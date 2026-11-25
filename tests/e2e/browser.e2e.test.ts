@@ -472,7 +472,7 @@ describe('the extension in a real Chromium', () => {
     await state(first, 'done');
     await expect(first.textContent('#run-status')).resolves.toMatch(/Done\. 0 saved, 9 unchanged of 9 documents/);
     const tree = await readTree(first);
-    expect(Object.keys(tree).filter((p) => p.endsWith('.md') && !p.startsWith('_Quip'))).toHaveLength(9);
+    expect(Object.keys(tree).filter((p) => p.endsWith('.md') && !p.startsWith('_Quip') && p !== '_Index.md')).toHaveLength(9);
     expect(Object.keys(tree).some((p) => /\(\d+\)\.md$/.test(p))).toBe(true); // the two same-titled notes, and nothing duplicated beyond them
     expect(Object.keys(tree).filter((p) => /Notes \(3\)|Project Plan \(2\)/.test(p))).toEqual([]);
     await Promise.all([first.close(), second.close()]);

@@ -15,6 +15,8 @@ export interface RewriteContext {
   originalUrl?: (target: string) => string | undefined;
   /** Site used to rebuild a link when the original is unknown. */
   siteUrl: string;
+  /** What to write where an attachment is not available, instead of the usual markers (a preview downloads no attachments). */
+  placeholders?: { image: (label: string) => string; file: (label: string) => string };
 }
 
 export interface RewriteResult {
@@ -47,6 +49,7 @@ export function rewriteSentinels(markdown: string, ctx: RewriteContext): Rewrite
       const path = ctx.blobPath(target);
       if (path) return `${bang}[${label}](${relativeLink(ctx.from, path)})`;
       missingBlobs.add(target);
+      if (ctx.placeholders) return bang ? ctx.placeholders.image(label) : ctx.placeholders.file(label);
       return bang ? `*[missing image${label ? `: ${label}` : ''}]*` : `${label || 'attachment'} *(attachment unavailable)*`;
     }
     const id = target.includes(DOC_VARIANT) ? target.slice(0, target.indexOf(DOC_VARIANT)) : target;

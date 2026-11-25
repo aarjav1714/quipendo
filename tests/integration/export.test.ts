@@ -28,7 +28,9 @@ import {
   T_NOTES_A,
   T_NOTES_B,
   T_PLAN,
+  T_CHAT,
   T_READING,
+  T_READING_SECRET,
   T_SHEET,
   T_SLIDES,
   TOKEN,
@@ -677,6 +679,55 @@ describe('comments next to the text they refer to', () => {
     const saved = JSON.parse(await read(`.quip-raw/${T_NOTES_A}/messages.json`, c)) as Array<{ id: string; annotationId?: string }>;
     expect(saved.find((m) => m.id === 'm1')?.annotationId).toBe('SecA');
     expect(saved.find((m) => m.id === 'm4')?.annotationId).toBeUndefined();
+  });
+});
+
+describe('previewing one document', () => {
+  it('returns the note an export would write, without writing anything or downloading attachments', async () => {
+    const { exporter } = makeSession();
+    const preview = await exporter.preview(T_READING_SECRET); // by the secret path of its address, as people have it
+    expect(preview).toMatchObject({ title: 'Reading Log', type: 'document', warnings: [] });
+    expect(preview.markdown).toMatch(/^---\ntitle: "Reading Log"\nquip_id: "tREADINGth1"\n/);
+    expect(preview.markdown).toContain('# Reading Log');
+    expect(preview.markdown).toContain('## Comments and conversation');
+    expect(preview.markdown).toContain('📎 receipt.pdf *(attachment, saved by a full export)*');
+    expect(await listTree(ctx.dir)).toEqual([]);
+    expect(requestsTo(/^\/1\/blob\//)).toBe(0);
+    expect(requestsTo(/\/export\//)).toBe(0);
+    expect(ctx.mock.mutating()).toEqual([]);
+  });
+
+  it('shows images and files as placeholders, and links to other documents by their Quip address', async () => {
+    const { exporter } = makeSession();
+    const { markdown, warnings } = await exporter.preview(T_PLAN);
+    expect(markdown).toContain('*[image: architecture]*');
+    expect(markdown).toContain('*[image: lost chart]*');
+    expect(markdown).toContain('spec.pdf *(attachment, saved by a full export)*');
+    expect(markdown).toContain('[Reading Log](https://acme.quip.com/tREADINGth1v/Reading-Log');
+    expect(markdown).not.toContain('_attachments');
+    expect(warnings.map((w) => w.code)).not.toContain('attachment-missing');
+  });
+
+  it('honours the comment options, and leaves comments out on request', async () => {
+    const noComments = await makeSession({ includeComments: false }).exporter.preview(T_READING);
+    expect(noComments.markdown).not.toContain('Comments and conversation');
+    expect(requestsTo(/^\/1\/messages\//)).toBe(0);
+  });
+
+  it('says why a chat cannot be previewed, and what a slide deck becomes', async () => {
+    await expect(makeSession().exporter.preview(T_CHAT)).rejects.toThrow(/chat/);
+    const slides = await makeSession().exporter.preview('SLIDESthrd1');
+    expect(slides.markdown).toContain('Quip slide decks cannot be converted to Markdown');
+    expect(requestsTo(/\/export\/pdf$/)).toBe(0);
+    await expect(makeSession().exporter.preview('NOPEnothere1')).rejects.toThrow(/404/);
+  });
+
+  it('does not change how a later export treats attachments', async () => {
+    const { exporter } = makeSession();
+    await exporter.preview(T_PLAN);
+    const summary = await exporter.run();
+    expect(summary.attachments.saved).toBeGreaterThan(0);
+    expect(await visible()).toContain('_attachments/PLANthread1/BLOBok00001.png');
   });
 });
 
