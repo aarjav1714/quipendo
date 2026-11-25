@@ -23,6 +23,12 @@ export interface MockOptions {
   delayMs?: number;
   /** Append tags that would load sub-resources from `/probe/...` to every document page; any request there is a leak. */
   probe?: boolean;
+  /**
+   * Let pages on other origins read the answers, as a real API would for a web page. A browser extension does not need it
+   * (its host permission lifts the same-origin rule), so it is off unless asked for, or `E2E_MOCK_CORS=1`, which the
+   * driver for a plain web page (WebKit, with the extension API stood in for) sets.
+   */
+  cors?: boolean;
 }
 
 /** Every common way for HTML to make a browser fetch something. `{{MOCK_URL}}` is replaced with the server's address. */
@@ -99,7 +105,19 @@ export async function startMockQuip(opts: MockOptions = {}): Promise<MockQuip> {
   };
   const userJson = (id: string): Record<string, unknown> | undefined => [ME, ANN, BOB].find((u) => u.id === id) && userInfo([ME, ANN, BOB].find((u) => u.id === id) as { id: string; name: string });
 
+  const cors = opts.cors ?? process.env.E2E_MOCK_CORS === '1';
+
   const handle = (req: http.IncomingMessage, res: http.ServerResponse): void => {
+    if (cors) {
+      res.setHeader('access-control-allow-origin', '*');
+      res.setHeader('access-control-allow-headers', 'authorization, accept, content-type');
+      res.setHeader('access-control-expose-headers', '*');
+      // The browser's own question before a request with an Authorization header; it is not a request to the API, so it is not recorded.
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        return void res.end();
+      }
+    }
     const url = new URL(req.url ?? '/', 'http://mock');
     const rec: RecordedRequest = { method: req.method ?? '', path: url.pathname, query: Object.fromEntries(url.searchParams), auth: req.headers.authorization ?? '', referer: String(req.headers.referer ?? '') };
     requests.push(rec);
