@@ -5,7 +5,7 @@
   --text: #1c1c1a;
   --muted: #6b6b66;
   --line: #deded8;
-  --accent: #2f6f4f;
+  --accent: #6d28d9;
   --accent-text: #ffffff;
   --ok: #1d7a43;
   --warn: #9a6200;
@@ -19,8 +19,8 @@
     --text: #ecece8;
     --muted: #a0a099;
     --line: #34352f;
-    --accent: #5db98a;
-    --accent-text: #0e1a13;
+    --accent: #a78bfa;
+    --accent-text: #150d2e;
     --ok: #62c98b;
     --warn: #e0b04a;
     --error: #f2877f;
@@ -47,6 +47,32 @@ main {
 h1 {
   margin: 0 0 4px;
   font-size: 26px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 14px;
+}
+
+.logo {
+  display: block;
+  flex: none;
+  width: 56px;
+  height: 56px;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.tagline {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 h2 {

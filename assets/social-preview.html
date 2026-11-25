@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Quipendo social preview</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 1280px;
+        height: 640px;
+        overflow: hidden;
+      }
+      body {
+        position: relative;
+        font-family: 'Avenir Next', 'Helvetica Neue', system-ui, sans-serif;
+        color: #fff;
+        background:
+          radial-gradient(760px 560px at 24% 52%, rgba(139, 92, 246, 0.55), transparent 68%),
+          radial-gradient(640px 460px at 100% 100%, rgba(34, 211, 238, 0.16), transparent 62%),
+          linear-gradient(135deg, #1b0b47 0%, #2a1066 55%, #12072e 100%);
+      }
+      #stars {
+        position: absolute;
+        inset: 0;
+      }
+      .logo {
+        position: absolute;
+        left: 92px;
+        top: 112px;
+        width: 416px;
+        height: 416px;
+        filter: drop-shadow(0 34px 50px rgba(10, 0, 40, 0.6));
+      }
+      .copy {
+        position: absolute;
+        left: 572px;
+        right: 64px;
+        top: 0;
+        bottom: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      h1 {
+        margin: 0;
+        padding: 0 0.05em 0.09em 0;
+        align-self: flex-start;
+        white-space: nowrap;
+        font-size: 120px;
+        line-height: 1;
+        font-weight: 800;
+        letter-spacing: -0.035em;
+        background: linear-gradient(180deg, #ffffff 35%, #d8c8ff 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .tag {
+        margin: 24px 0 0;
+        font-size: 40px;
+        line-height: 1.25;
+        font-weight: 500;
+        color: #e8defe;
+      }
+      .tag b {
+        font-weight: 700;
+        color: #fde68a;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 34px;
+      }
+      .chip {
+        font-size: 23px;
+        font-weight: 600;
+        padding: 9px 20px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #f4eeff;
+      }
+      .foot {
+        margin-top: 30px;
+        font-size: 22px;
+        letter-spacing: 0.03em;
+        color: #b7a4ee;
+      }
+    </style>
+  </head>
+  <body>
+    <svg id="stars" width="1280" height="640" viewBox="0 0 1280 640" aria-hidden="true"></svg>
+    <img class="logo" src="logo.svg" alt="" />
+    <div class="copy">
+      <h1>Quipendo</h1>
+      <p class="tag">A charm that turns your <b>Quip</b> folders into <b>Markdown</b>.</p>
+      <div class="chips">
+        <span class="chip">Calendars</span>
+        <span class="chip">Kanban boards</span>
+        <span class="chip">Spreadsheets</span>
+      </div>
+      <div class="foot">Read-only &middot; Chrome extension + CLI &middot; MIT</div>
+    </div>
+    <script>
+      // A fixed seed keeps the star field identical on every render.
+      let seed = 7;
+      const next = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+      const stars = document.getElementById('stars');
+      for (let i = 0; i < 90; i += 1) {
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        dot.setAttribute('cx', (next() * 1280).toFixed(1));
+        dot.setAttribute('cy', (next() * 640).toFixed(1));
+        dot.setAttribute('r', (0.6 + next() * 1.6).toFixed(2));
+        dot.setAttribute('fill', '#fff');
+        dot.setAttribute('opacity', (0.15 + next() * 0.5).toFixed(2));
+        stars.appendChild(dot);
+      }
+    </script>
+  </body>
+</html>

@@ -1,8 +1,15 @@
-# Quipendo
+<p align="center">
+  <img src="assets/logo.svg" alt="Quipendo logo" width="128" height="128">
+</p>
 
-*A charm that turns your Quip folders into Markdown, before Quip goes away.*
+<h1 align="center">Quipendo</h1>
 
-[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/aarjav1714)
+<p align="center"><em>A charm that turns your Quip folders into Markdown, before Quip goes away.</em></p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-6d28d9"></a>
+  <a href="https://github.com/sponsors/aarjav1714"><img alt="Sponsor" src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?logo=githubsponsors&logoColor=white"></a>
+</p>
 
 **Quipendo** is a Chrome (Manifest V3) extension, and a command line version of the same code, that copy your Quip folders and documents into a folder on your computer as Markdown, keeping Quip's folder structure. It also converts embedded content that other exporters drop: **calendars, Kanban boards, project trackers, process bars, embedded and standalone spreadsheets**, comments, images and file attachments.
 
@@ -200,7 +207,10 @@ None of these is a browser extension that mirrors a whole Quip folder tree as Ma
 npm test          # unit and mock-server integration tests
 npm run e2e       # builds a test variant and drives it in a real Chromium with Playwright
 npm run check     # typecheck, tests, production build, build verification
+npm run icons     # redraws the PNG icons, assets/logo-512.png and the social preview from assets/logo.svg
 ```
+
+The PNGs are committed, so a normal build needs neither `npm run icons` nor a browser. The social preview (`assets/social-preview.png`) is uploaded by hand in the repository settings.
 
 - `src/core/` has no browser dependencies: `convert/` (HTML → Markdown), `quipClient.ts`, `exporter.ts`, `naming.ts`, `rewrite.ts`.
 - `src/ui/` is the exporter page (File System Access API, settings, progress); `src/background.ts` opens it.
@@ -212,3 +222,5 @@ To add support for another embedded type, extend `src/core/convert/liveApps.ts` 
 ## License
 
 [MIT](LICENSE)
+
+Quipendo is an independent project. It is not affiliated with, endorsed by or sponsored by Salesforce. Quip is a trademark of Salesforce, Inc.

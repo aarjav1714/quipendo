@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="title">
+  <title id="title">Quipendo</title>
+  <defs>
+    <linearGradient id="bg" x1="0.08" y1="0" x2="0.92" y2="1">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="0.5" stop-color="#6D28D9"/>
+      <stop offset="1" stop-color="#2A1066"/>
+    </linearGradient>
+    <radialGradient id="sheen" cx="0.28" cy="0.1" r="0.8">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="aqua" cx="0.08" cy="1" r="0.75">
+      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="chalk" gradientUnits="userSpaceOnUse" x1="100" y1="90" x2="400" y2="400">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E6DAFF"/>
+    </linearGradient>
+    <radialGradient id="gold" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFFEF5"/>
+      <stop offset="0.5" stop-color="#FDE68A"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FDE68A" stop-opacity="0.8"/>
+      <stop offset="0.45" stop-color="#FBBF24" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#FBBF24" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="flare" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="lift" x="-25%" y="-25%" width="150%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="11" flood-color="#1B0A45" flood-opacity="0.5"/>
+    </filter>
+    <clipPath id="tile"><rect width="512" height="512" rx="116"/></clipPath>
+    <path id="spark" d="M0 -64 Q12 -12 64 0 Q12 12 0 64 Q-12 12 -64 0 Q-12 -12 0 -64 Z"/>
+  </defs>
+
+  <g clip-path="url(#tile)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    <rect width="512" height="512" fill="url(#sheen)"/>
+    <rect width="512" height="512" fill="url(#aqua)" class="fine"/>
+
+    <g class="fine">
+      <use href="#spark" xlink:href="#spark" transform="translate(392 100) scale(0.36)" fill="#FFFFFF"/>
+      <use href="#spark" xlink:href="#spark" transform="translate(104 436) scale(0.27)" fill="#67E8F9"/>
+      <use href="#spark" xlink:href="#spark" transform="translate(452 164) scale(0.19)" fill="#FDE68A"/>
+      <circle cx="432" cy="128" r="6" fill="#FFFFFF" opacity="0.75"/>
+      <circle cx="150" cy="468" r="4.5" fill="#FFFFFF" opacity="0.6"/>
+      <circle cx="52" cy="336" r="3.5" fill="#FFFFFF" opacity="0.5"/>
+      <circle cx="300" cy="60" r="4" fill="#C4B5FD" opacity="0.8"/>
+      <circle cx="448" cy="290" r="6" fill="#FDE68A" opacity="0.9"/>
+      <circle cx="466" cy="250" r="4.5" fill="#FDE68A" opacity="0.7"/>
+      <circle cx="474" cy="216" r="3" fill="#FDE68A" opacity="0.55"/>
+    </g>
+
+    <g class="mark" filter="url(#lift)">
+      <circle id="ring" cx="206" cy="214" r="112" fill="none" stroke="url(#chalk)" stroke-width="62"/>
+      <path id="tail" d="M186.0 347.2 L192.9 352.8 L199.9 358.0 L207.0 362.8 L214.2 367.3 L221.5 371.4 L228.8 375.1 L236.2 378.4 L243.7 381.4 L251.1 384.0 L258.6 386.2 L266.1 388.1 L273.6 389.5 L281.1 390.6 L288.5 391.3 L295.9 391.6 L303.2 391.6 L310.5 391.1 L317.7 390.3 L324.8 389.1 L331.8 387.6 L338.6 385.7 L345.4 383.4 L352.0 380.8 L358.4 377.9 L364.7 374.6 L370.9 371.0 L376.9 367.1 L382.8 362.9 L388.4 358.4 L394.0 353.6 L399.3 348.5 L404.6 343.1 L399.4 336.9 L393.3 340.6 L387.2 343.9 L381.1 346.8 L375.0 349.4 L369.0 351.6 L363.0 353.5 L357.0 355.0 L351.1 356.3 L345.2 357.2 L339.4 357.8 L333.6 358.2 L328.0 358.2 L322.3 358.0 L316.7 357.5 L311.2 356.7 L305.8 355.7 L300.3 354.4 L294.9 352.9 L289.6 351.2 L284.3 349.2 L279.0 346.9 L273.8 344.5 L268.5 341.8 L263.3 338.8 L258.1 335.6 L253.0 332.2 L247.8 328.6 L242.6 324.7 L237.5 320.6 L232.3 316.2 L227.2 311.6 L222.0 306.8 Z" fill="url(#chalk)" stroke="url(#chalk)" stroke-width="4" stroke-linejoin="round"/>
+    </g>
+    <path d="M87.6 170.9 A126 126 0 0 1 162.9 95.6" fill="none" stroke="#FFFFFF" stroke-opacity="0.7" stroke-width="5" stroke-linecap="round" class="fine"/>
+
+    <g id="star" transform="translate(406 338)">
+      <circle r="124" fill="url(#glow)" class="fine"/>
+      <rect x="-124" y="-1.6" width="248" height="3.2" fill="url(#flare)" class="fine"/>
+      <rect x="-86" y="-1.4" width="172" height="2.8" fill="url(#flare)" transform="rotate(90)" class="fine" opacity="0.55"/>
+      <use href="#spark" xlink:href="#spark" fill="url(#gold)"/>
+    </g>
+
+    <rect x="1.5" y="1.5" width="509" height="509" rx="114.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.16" stroke-width="3" class="fine"/>
+  </g>
+</svg>

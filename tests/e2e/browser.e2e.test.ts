@@ -84,6 +84,8 @@ describe('the extension in a real Chromium', () => {
     expect(extensionId).toMatch(/^[a-p]{32}$/);
     const page = await openExporter();
     expect(await page.title()).toBe('Quipendo');
+    await expect(page.evaluate(() => (document.querySelector('header img') as HTMLImageElement | null)?.naturalWidth ?? 0)).resolves.toBeGreaterThan(0);
+    await expect(page.evaluate(() => chrome.runtime.getManifest().icons)).resolves.toMatchObject({ '16': 'icons/icon-16.png', '128': 'icons/icon-128.png' });
     await expect(page.textContent('#guard-status')).resolves.toContain('read-only guard: on');
     await expect(page.textContent('#target-name')).resolves.toBe('e2e-target');
     await page.close();

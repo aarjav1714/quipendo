@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -36,5 +36,6 @@ if (e2e) {
 }
 await writeFile(`${outdir}/manifest.json`, `${JSON.stringify(manifest, null, 2)}\n`);
 for (const file of ['exporter.html', 'exporter.css']) await copyFile(`${root}extension/${file}`, `${outdir}/${file}`);
+await cp(`${root}extension/icons`, `${outdir}/icons`, { recursive: true });
 
 console.log(`Built ${e2e ? 'E2E ' : ''}extension into ${outdir}`);
