@@ -48,7 +48,18 @@ These commands come from Apple's documentation. They could not be run on the Mac
 
 `io.github.aarjav1714.quipendo` is a placeholder; use an identifier you own. Giving the extension to other people means signing it: the Mac App Store or a notarized download, both of which need Apple's paid developer program. That is the one step that cannot be done from this repository.
 
-## Run the end-to-end tests in Safari
+## Check the page in WebKit, without a Mac
+
+Safari's engine is WebKit, and Playwright ships a build of it that runs anywhere:
+
+```bash
+npx playwright install webkit
+npm run e2e:webkit
+```
+
+It serves the Safari build of the page from a local web server and stands in for the extension API (`tests/e2e/harness/shim.ts`), so it checks the page's own behaviour in that engine: the export and its `.zip` files, IndexedDB, Blob, `CompressionStream`, `DOMParser` and several tabs at once. It skips the scenarios that need a real extension (the toolbar button, site access, the request guard). CI runs it on every push. It found that a temporary WebKit session cannot keep a Blob in IndexedDB, which the store now handles by keeping the bytes as plain data.
+
+## Run the end-to-end tests in the real Safari
 
 `npm run e2e:safari` runs the same scenarios as for the other browsers in your real Safari, through AppleScript. It uses one window or tab per page and runs JavaScript in it with `do JavaScript`. It does not drive Safari's windows, so it works while the Mac is locked once it has started, but the setup needs a person at the screen.
 

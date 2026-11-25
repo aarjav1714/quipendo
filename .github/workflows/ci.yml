@@ -43,6 +43,19 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
 
+  e2e-webkit:
+    name: Page tests in WebKit (Safari's engine)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps webkit
+      - run: npm run e2e:webkit
+
   e2e-firefox:
     name: Browser tests in Firefox
     runs-on: ubuntu-latest

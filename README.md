@@ -251,7 +251,8 @@ None of these is a browser extension that mirrors a whole Quip folder tree as Ma
 npm test               # unit and mock-server integration tests
 npm run e2e            # builds a test variant and drives it in a real Chromium with Playwright
 npm run e2e:firefox    # the same scenarios in stock Firefox, through geckodriver
-npm run e2e:safari     # the same scenarios in Safari on a Mac, through AppleScript (one-time setup: docs/safari.md)
+npm run e2e:webkit     # the page itself in WebKit, Safari's engine, with the extension API stood in for (no Mac needed)
+npm run e2e:safari     # the same scenarios in the real Safari on a Mac, through AppleScript (one-time setup: docs/safari.md)
 npm run build:all      # dist/ (Chrome), dist-firefox/ and dist-safari/
 npm run check          # typecheck, tests, production builds for all three browsers, build verification
 npm run icons          # redraws the PNG icons, the store icon, assets/logo-512.png and the social preview from assets/logo.svg
@@ -266,11 +267,11 @@ The artwork has two sources. `assets/logo.svg` is the logo: a Q that is also a s
 - `src/ui/` is the exporter page (File System Access API, settings, progress, the folder tree in `tree.ts`, the export kept in the browser in `storeSink.ts`, and `webext.ts` and `guard.ts` for what differs between browsers); `src/background.ts` and `src/openExporter.ts` open it. `scripts/targets.mjs` says how each browser's manifest differs.
 - `src/node/` is the command line version (`cli.ts`, a Node file sink and a jsdom parser); `npm run build:cli` writes `dist-cli/cli.mjs`.
 - `tests/mock/` is a synthetic Quip API (users, folders, paginated HTML, messages, blobs, 503 throttling, failure injection) used by both the integration and browser tests, which require the browser export to match the Node export file for file.
-- `tests/e2e/browser.e2e.test.ts` holds the scenarios once; `tests/e2e/harness/` has a driver for each browser (`E2E_BROWSER=chromium|firefox|safari`). A scenario a browser cannot run, such as the folder picker in Firefox, is skipped for it, with the reason in its name.
+- `tests/e2e/browser.e2e.test.ts` holds the scenarios once; `tests/e2e/harness/` has a driver for each browser (`E2E_BROWSER=chromium|firefox|webkit|safari`). A scenario a browser cannot run, such as the folder picker in Firefox, is skipped for it, with the reason in its name.
 
 To add support for another embedded type, extend `src/core/convert/liveApps.ts` and add a case to `tests/unit/liveApps.test.ts`.
 
-**Releasing.** Push a tag `vX.Y.Z` that matches the version in `package.json`, `extension/manifest.json` and `TOOL_VERSION` in `src/core/exporter.ts` (`npm run verify-build` fails if they differ). The [Release workflow](.github/workflows/release.yml) runs the checks, the browser tests in Chromium and Firefox and the Firefox lint, attaches `quipendo-chrome-vX.Y.Z.zip`, `quipendo-firefox-vX.Y.Z.zip`, the source (`quipendo-source-vX.Y.Z.zip`, which addons.mozilla.org asks for because the code is bundled) and checksums to a GitHub release, and publishes the command line tool to npm when an `NPM_TOKEN` secret exists. The [CI workflow](.github/workflows/ci.yml) runs the same checks on every push, plus a Safari package build on macOS and the packed tool on Node 20, 22 and 24. Publishing is described for the [Chrome Web Store](docs/chrome-web-store.md), [Firefox](docs/firefox-addons.md) and [Safari](docs/safari.md).
+**Releasing.** Push a tag `vX.Y.Z` that matches the version in `package.json`, `extension/manifest.json` and `TOOL_VERSION` in `src/core/exporter.ts` (`npm run verify-build` fails if they differ). The [Release workflow](.github/workflows/release.yml) runs the checks, the browser tests in Chromium, Firefox and WebKit and the Firefox lint, attaches `quipendo-chrome-vX.Y.Z.zip`, `quipendo-firefox-vX.Y.Z.zip`, the source (`quipendo-source-vX.Y.Z.zip`, which addons.mozilla.org asks for because the code is bundled) and checksums to a GitHub release, and publishes the command line tool to npm when an `NPM_TOKEN` secret exists. The [CI workflow](.github/workflows/ci.yml) runs the same checks on every push, plus the page in WebKit, a Safari package build on macOS and the packed tool on Node 20, 22 and 24. Publishing is described for the [Chrome Web Store](docs/chrome-web-store.md), [Firefox](docs/firefox-addons.md) and [Safari](docs/safari.md).
 
 ## License
 

@@ -37,9 +37,10 @@ jobs:
 
       - run: npm run check
 
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
       - run: npm run e2e
       - run: npm run e2e:firefox
+      - run: npm run e2e:webkit
       - run: npx --yes web-ext@10.8.0 lint -s dist-firefox --warnings-as-errors
 
       - name: Package the extension for each browser, and the source
