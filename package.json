@@ -12,13 +12,13 @@
     "chrome-extension",
     "cli"
   ],
-  "homepage": "https://github.com/aarjav1714/quip-md-export#readme",
+  "homepage": "https://github.com/aarjav1714/quipendo#readme",
   "bugs": {
-    "url": "https://github.com/aarjav1714/quip-md-export/issues"
+    "url": "https://github.com/aarjav1714/quipendo/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/aarjav1714/quip-md-export.git"
+    "url": "git+https://github.com/aarjav1714/quipendo.git"
   },
   "author": "Aarjav",
   "funding": {

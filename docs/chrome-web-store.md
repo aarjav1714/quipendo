@@ -5,8 +5,8 @@ Everything needed to fill in the listing is here. Submitting it needs your own d
 ## Before you start
 
 1. Register at the [developer dashboard](https://chrome.google.com/webstore/devconsole). There is a one-time registration fee, and Google's page lists the [supported countries](https://developer.chrome.com/docs/webstore/register). Use an email you check often: review messages and policy warnings go there, and it cannot be changed later.
-2. Publish the [privacy policy](../PRIVACY.md) at a public address (its address on GitHub works once it is pushed): `https://github.com/aarjav1714/quip-md-export/blob/main/PRIVACY.md`.
-3. Get the package: the `quipendo-extension-<version>.zip` attached to a [release](https://github.com/aarjav1714/quip-md-export/releases) (the release workflow builds it from a version tag), or build it yourself with `npm run build` and zip the *contents* of `dist/`, so `manifest.json` is at the top of the zip.
+2. Publish the [privacy policy](../PRIVACY.md) at a public address (its address on GitHub works once it is pushed): `https://github.com/aarjav1714/quipendo/blob/main/PRIVACY.md`.
+3. Get the package: the `quipendo-extension-<version>.zip` attached to a [release](https://github.com/aarjav1714/quipendo/releases) (the release workflow builds it from a version tag), or build it yourself with `npm run build` and zip the *contents* of `dist/`, so `manifest.json` is at the top of the zip.
 4. The listing images are in [`assets/store/`](../assets/store). `npm run store-assets` rebuilds them from the real extension page and the test account, and `npm run icons` rebuilds the store icon.
 
 ## Listing
@@ -39,7 +39,7 @@ Everything needed to fill in the listing is here. Submitting it needs your own d
 > Read-only and private
 > • It can only read from Quip. It cannot create, edit or delete a document, and the browser itself blocks any write it might try
 > • Your access token and your documents go to Quip and your own computer, nowhere else. No analytics, no ads, no account, no server
-> • Open source (MIT): github.com/aarjav1714/quip-md-export
+> • Open source (MIT): github.com/aarjav1714/quipendo
 >
 > How to start
 > 1. Sign in to Quip and create a personal access token at quip.com/dev/token
@@ -67,7 +67,7 @@ Everything needed to fill in the listing is here. Submitting it needs your own d
 
 **Data usage:** tick *Authentication information* (the user's Quip access token, used only to read from Quip). The user's Quip content is handled on the user's computer only; if the dashboard asks about *Website content* or *Personal communications*, the same applies: it is read from Quip at the user's request, written to the user's chosen folder, and not sent to the developer or anyone else. Then tick all three certifications: no selling or transferring of user data outside approved uses, no use unrelated to the single purpose, and no use for creditworthiness or lending.
 
-**Privacy policy URL:** `https://github.com/aarjav1714/quip-md-export/blob/main/PRIVACY.md`
+**Privacy policy URL:** `https://github.com/aarjav1714/quipendo/blob/main/PRIVACY.md`
 
 ## Graphics
 

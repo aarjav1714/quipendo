@@ -39,4 +39,4 @@ Quip (a Salesforce service) receives the requests, as it does from any API clien
 
 ## Changes and contact
 
-Changes to this policy are made in this file, so its history shows what changed and when. Questions and reports: [github.com/aarjav1714/quip-md-export/issues](https://github.com/aarjav1714/quip-md-export/issues).
+Changes to this policy are made in this file, so its history shows what changed and when. Questions and reports: [github.com/aarjav1714/quipendo/issues](https://github.com/aarjav1714/quipendo/issues).

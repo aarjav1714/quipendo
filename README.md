@@ -29,11 +29,11 @@ The extension and the command line are the same exporter, and both only ever sen
 **1. Install**
 
 ```bash
-git clone https://github.com/aarjav1714/quip-md-export && cd quip-md-export
+git clone https://github.com/aarjav1714/quipendo && cd quipendo
 npm ci
 ```
 
-Once a release is published you can skip this: `npx quipendo --out ~/quip-export` runs the tool with nothing to clone, and the extension is a zip on the [Releases page](https://github.com/aarjav1714/quip-md-export/releases). The examples below use `npm run cli --`; `npx quipendo` takes the same options.
+Once a release is published you can skip this: `npx quipendo --out ~/quip-export` runs the tool with nothing to clone, and the extension is a zip on the [Releases page](https://github.com/aarjav1714/quipendo/releases). The examples below use `npm run cli --`; `npx quipendo` takes the same options.
 
 **2. Get a token.** While signed in to Quip, open `https://<your-site>.quip.com/dev/token` (or `quip.com/dev/token`), click **Get Personal Access Token** and copy it. Give it to your shell without echoing it or leaving it in your history:
 
@@ -123,7 +123,7 @@ For example, to bring an export up to date with only what changed this year, ski
 
 Same exporter behind a page.
 
-1. **Get it.** Download `quipendo-extension-<version>.zip` from the [Releases page](https://github.com/aarjav1714/quip-md-export/releases) (once a release is published) and unzip it, or run `npm run build`, which writes the extension to `dist/`. In Chrome or Edge open `chrome://extensions` (or `edge://extensions`), turn on **Developer mode**, choose **Load unpacked** and pick that folder. It uses an API token, not your browser session, so any Chromium browser works. In Dia 1.58 it loaded when Dia was started with `open -a Dia --args --load-extension="$PWD/dist"` (quit Dia first; it lasts for that session; Dia's own *Load unpacked* was not tried).
+1. **Get it.** Download `quipendo-extension-<version>.zip` from the [Releases page](https://github.com/aarjav1714/quipendo/releases) (once a release is published) and unzip it, or run `npm run build`, which writes the extension to `dist/`. In Chrome or Edge open `chrome://extensions` (or `edge://extensions`), turn on **Developer mode**, choose **Load unpacked** and pick that folder. It uses an API token, not your browser session, so any Chromium browser works. In Dia 1.58 it loaded when Dia was started with `open -a Dia --args --load-extension="$PWD/dist"` (quit Dia first; it lasts for that session; Dia's own *Load unpacked* was not tried).
 2. Get a token as in step 2 above.
 3. Click the extension's toolbar icon (if a Quip page is open you can export just that document or folder), paste the token and press **Connect**.
 4. *Optional:* paste a document's address under *preview one document* to see what it becomes. Nothing is saved and images and attachments are left out; **Copy Markdown** or **Download .md** takes the text.
