@@ -73,6 +73,22 @@ export class SafariDriver implements E2EDriver {
     if ((await this.anchor.evaluate(() => document.title).catch(() => '')) !== 'Quipendo') {
       throw new Error(`No Quipendo page is open at ${this.extensionOrigin}/exporter.html. Press the extension's toolbar button in Safari. See docs/safari.md.`);
     }
+    await this.ensureAccess();
+  }
+
+  /** Safari grants nothing at install, and only asks when a click on the page requests access: wait for a person to do that once. */
+  private async ensureAccess(): Promise<void> {
+    const host = new URL(this.mock.url).hostname;
+    const has = (): Promise<boolean> => this.anchor.evaluate((pattern: string) => chrome.permissions.contains({ origins: [pattern] }), `http://${host}/*`);
+    if (await has()) return;
+    const page = await this.open();
+    process.stderr.write(`\nQuipendo has no access to ${host} in Safari yet. In the Safari tab that just opened, press Connect and allow it (waiting two minutes).\n`);
+    const deadline = Date.now() + 120_000;
+    while (!(await has())) {
+      if (Date.now() > deadline) throw new Error(`Safari did not give Quipendo access to ${host}. Press Connect in the test page and allow it, then run the tests again.`);
+      await sleep(1000);
+    }
+    await page.close();
   }
 
   /** The address of the extension's pages, read off an open tab of one of them. */
