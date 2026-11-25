@@ -33,6 +33,7 @@ Options:
       --no-comments    Leave out comments and conversation.
       --no-raw         Do not keep Quip's original HTML and metadata (.quip-raw).
       --no-xlsx        Do not save spreadsheets as .xlsx next to their notes.
+      --docx           Also save Quip's own Word (.docx) copy of each document next to its note (one more request each).
       --no-unfiled     Do not export documents you wrote that are in no folder.
       --token-stdin    Read the token from standard input instead of QUIP_TOKEN.
   -h, --help           Show this help.
@@ -109,6 +110,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
         'no-comments': { type: 'boolean' },
         'no-raw': { type: 'boolean' },
         'no-xlsx': { type: 'boolean' },
+        docx: { type: 'boolean' },
         'no-unfiled': { type: 'boolean' },
         'token-stdin': { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
@@ -205,6 +207,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
       includeComments: !values['no-comments'],
       keepRaw: !values['no-raw'],
       saveXlsx: !values['no-xlsx'],
+      saveDocx: values.docx === true,
       skipUnchanged: !values.force,
       ...(limit !== undefined ? { maxDocs: limit } : {}),
       ...(sinceUsec !== undefined ? { sinceUsec } : {}),

@@ -79,6 +79,13 @@ describe('exporting an account', () => {
     expect((await visible()).filter((p) => p.endsWith('.md') && !p.startsWith('_Quip') && p !== '_Index.md')).toHaveLength(2);
   });
 
+  it('--docx also saves Quip\'s Word copies next to the notes', async () => {
+    const r = await run(['--out', dir, '--docx', '--limit', '2']);
+    expect(r.code).toBe(0);
+    expect((await visible()).filter((p) => p.endsWith('.docx'))).toEqual(['Private/Notes.docx', 'Private/Reading Log.docx']);
+    expect(await readFile(join(dir, 'Private/Reading Log.md'), 'utf8')).toContain('[Reading Log.docx](Reading%20Log.docx)');
+  });
+
   it('scans without writing anything or downloading a document', async () => {
     const r = await run(['--out', dir, '--scan-only']);
     expect(r.code).toBe(0);

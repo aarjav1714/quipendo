@@ -10,6 +10,7 @@ import { createSession } from '../../src/core/session';
 import {
   ANN,
   B_OK,
+  DOCX_BYTES,
   F_ARCH,
   F_DESK,
   F_LOCKED,
@@ -486,6 +487,72 @@ describe('the index files', () => {
     expect(tree).toContain('_Index (2).md');
     expect(await read('_Index.md', odd)).toMatch(/^# Quip export index\n/);
     expect((await indexJson(odd)).documents.some((d) => d.path === '_Index (2).md')).toBe(true);
+  });
+});
+
+describe('the optional Word copy', () => {
+  const bump = (id: string): void => {
+    const doc = ctx.mock.fixture.threads[id];
+    if (doc) doc.updated += 1_000_000;
+  };
+
+  it('saves Quip\'s Word rendering next to each document, and only documents', async () => {
+    await runAll({ saveDocx: true });
+    const docx = (await visible()).filter((p) => p.endsWith('.docx'));
+    expect(docx).toEqual([
+      'Private/Notes.docx',
+      'Private/Q3-Q4 - plan - final.docx',
+      'Private/Reading Log.docx',
+      'Private/notes (2).docx',
+      'Private/Projects/Project Plan.docx',
+      'Team Shared/Shared doc.docx',
+      '_Unfiled/Loose note.docx',
+    ].sort());
+    expect(new Uint8Array(await readFile(join(ctx.dir, 'Private/Reading Log.docx')))).toEqual(DOCX_BYTES);
+    expect(requestsTo(/\/export\/docx$/)).toBe(7); // not for the spreadsheet or the slide deck
+    const note = await read('Private/Reading Log.md');
+    expect(note).toContain('> Word copy as Quip exports it (without comments): [Reading Log.docx](Reading%20Log.docx)');
+    expect(note).toContain('> Original spreadsheet with its formulas'); // beside the spreadsheet line, not instead of it
+    const json = JSON.parse(await read('_index.json')) as { documents: Array<{ id: string; files?: string[] }> };
+    expect(json.documents.find((d) => d.id === T_READING)?.files).toEqual(['Private/Reading Log.xlsx', 'Private/Reading Log.docx']);
+  });
+
+  it('is off by default, and turning it on or off brings existing notes up to date', async () => {
+    await runAll();
+    expect(requestsTo(/\/export\/docx$/)).toBe(0);
+    expect(await read('Private/Notes.md')).not.toContain('.docx');
+    const on = await runAll({ saveDocx: true });
+    expect(on.docs.exported).toBe(9); // every note gains the line, so every note is rewritten
+    expect(await read('Private/Notes.md')).toContain('[Notes.docx](Notes.docx)');
+    const unchanged = await runAll({ saveDocx: true });
+    expect(unchanged.docs).toMatchObject({ exported: 0, skipped: 9 });
+    await runAll();
+    expect(await read('Private/Notes.md')).not.toContain('.docx');
+    expect(await visible()).toContain('Private/Notes.docx'); // nothing is ever deleted
+  });
+
+  it('reports a refusal without retrying it on every run, and does not save something that is not a Word file', async () => {
+    const refused = await setup({ override: (req) => (/\/export\/docx$/.test(req.path) ? { status: 403 } : undefined) });
+    const first = await runAll({ saveDocx: true }, refused);
+    expect(first.warnings['docx-failed']).toMatchObject({ count: 7 });
+    expect((await visible(refused)).some((p) => p.endsWith('.docx'))).toBe(false);
+    expect(await read('Private/Reading Log.md', refused)).not.toContain('.docx');
+    expect((await runAll({ saveDocx: true }, refused)).docs).toMatchObject({ exported: 0, skipped: 9 });
+
+    const odd = await setup({ override: (req) => (req.path === `/1/threads/${T_READING}/export/docx` ? { status: 200, body: { note: 'definitely not a Word file' } } : undefined) });
+    const summary = await runAll({ saveDocx: true }, odd);
+    expect(summary.warnings['docx-failed']?.examples.join(' ')).toContain('did not return a Word document');
+    expect(await visible(odd)).not.toContain('Private/Reading Log.docx');
+  });
+
+  it('keeps a copy the user edited, and writes the new one beside it', async () => {
+    await runAll({ saveDocx: true });
+    await writeFile(join(ctx.dir, 'Private/Reading Log.docx'), 'MY OWN EDITED COPY');
+    bump(T_READING);
+    await runAll({ saveDocx: true });
+    expect(await read('Private/Reading Log.docx')).toBe('MY OWN EDITED COPY');
+    expect(new Uint8Array(await readFile(join(ctx.dir, 'Private/Reading Log (2).docx')))).toEqual(DOCX_BYTES);
+    expect(await read('Private/Reading Log.md')).toContain('[Reading Log.docx](Reading%20Log%20%282%29.docx)');
   });
 });
 

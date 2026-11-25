@@ -46,7 +46,7 @@ export const READ_ONLY_ENDPOINTS: readonly RegExp[] = [
   /^\/2\/threads\/[A-Za-z0-9]{8,32}\/html$/,
   /^\/1\/messages\/[A-Za-z0-9]{8,32}$/,
   /^\/1\/blob\/[A-Za-z0-9]{8,32}\/[\w-]{8,64}$/,
-  /^\/1\/threads\/[A-Za-z0-9]{8,32}\/export\/(pdf|xlsx)$/,
+  /^\/1\/threads\/[A-Za-z0-9]{8,32}\/export\/(pdf|xlsx|docx)$/,
 ];
 
 export function assertReadOnly(method: string, path: string): void {
@@ -498,6 +498,11 @@ export class QuipClient implements QuipApi {
   /** Quip's own XLSX rendering of a spreadsheet or of a document's embedded spreadsheets (keeps formulas). */
   async getXlsx(threadId: string): Promise<BinaryResponse> {
     return this.getBytes(`/1/threads/${requireId(threadId)}/export/xlsx`);
+  }
+
+  /** Quip's own Word rendering of a document. It leaves out comments, so it complements the Markdown note. */
+  async getDocx(threadId: string): Promise<BinaryResponse> {
+    return this.getBytes(`/1/threads/${requireId(threadId)}/export/docx`);
   }
 
   async getUsers(ids: string[]): Promise<Map<string, string>> {

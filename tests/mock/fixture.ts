@@ -89,6 +89,7 @@ export const PNG_1X1 = Uint8Array.from(
 );
 export const PDF_BYTES = new TextEncoder().encode('%PDF-1.4\n%mock attachment\n');
 export const XLSX_BYTES = new TextEncoder().encode('PK\u0003\u0004mock xlsx with formulas');
+export const DOCX_BYTES = new TextEncoder().encode('PK\u0003\u0004mock docx');
 
 const US = 1_000_000;
 const base = Date.UTC(2021, 1, 3, 10, 0, 0) / 1000;

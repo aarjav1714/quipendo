@@ -46,6 +46,8 @@ export interface ExportOptions {
   keepRaw: boolean;
   /** Save Quip's XLSX export next to notes that contain spreadsheets (it keeps formulas, which HTML does not). */
   saveXlsx: boolean;
+  /** Also save Quip's own Word (.docx) rendering of each document next to its note. One more request per document. */
+  saveDocx: boolean;
   /** Skip documents whose `updated_usec`, options and link targets match the previous export. */
   skipUnchanged: boolean;
   maxDocs: number | undefined;
@@ -72,6 +74,7 @@ export const DEFAULT_OPTIONS: ExportOptions = {
   includeComments: true,
   keepRaw: true,
   saveXlsx: true,
+  saveDocx: false,
   skipUnchanged: true,
   maxDocs: undefined,
   sinceUsec: undefined,
@@ -332,7 +335,8 @@ export class Exporter {
 
   private fingerprint(): string {
     const o = this.opts;
-    return `v${FORMAT_VERSION}c${o.includeComments ? 1 : 0}x${o.saveXlsx ? 1 : 0}`;
+    // The suffix appears only when the option is on, so an export made without it keeps its fingerprint.
+    return `v${FORMAT_VERSION}c${o.includeComments ? 1 : 0}x${o.saveXlsx ? 1 : 0}${o.saveDocx ? 'd1' : ''}`;
   }
 
   // ---- state and naming ------------------------------------------------
@@ -845,6 +849,7 @@ export class Exporter {
     };
     let body: string;
     let xlsxLine = '';
+    let wordLine = '';
 
     if (meta.type === 'slides') {
       body = await this.slidesBody(t, warnings, flags);
@@ -854,6 +859,7 @@ export class Exporter {
       if (rawHtml.trim() === '') warnings.push({ code: 'empty-html', detail: 'Quip returned no content (often a permissions issue)' });
       body = await this.stage('convert', () => this.convert(t, rawHtml, warnings, embeds, flags, linkLog));
       xlsxLine = await this.saveSpreadsheet(t, embeds, warnings, flags);
+      wordLine = await this.saveWordCopy(t, warnings, flags);
     }
 
     let comments = '';
@@ -866,7 +872,7 @@ export class Exporter {
     }
 
     await this.claimNotePath(t);
-    await this.writeRecorded(t.path, this.composeNote(t, body, xlsxLine, comments, embeds));
+    await this.writeRecorded(t.path, this.composeNote(t, body, [xlsxLine, wordLine], comments, embeds));
     if (this.opts.keepRaw) {
       await writeRaw('thread.json', JSON.stringify({ meta: t.raw, normalized: meta }, null, 1));
       if (this.opts.includeComments && meta.type !== 'slides') await writeRaw('messages.json', JSON.stringify(messages, null, 1));
@@ -1011,7 +1017,27 @@ export class Exporter {
     }
   }
 
-  private composeNote(t: PlannedThread, body: string, xlsxLine: string, comments: string, embeds: Record<string, number>): string {
+  /** Quip's own Word rendering, kept next to the note for anyone who wants a copy that opens in Word. Documents only. */
+  private async saveWordCopy(t: PlannedThread, warnings: Warning[], flags: Flags): Promise<string> {
+    if (!this.opts.saveDocx || t.meta.type !== 'document') return '';
+    const title = t.meta.title.trim() || 'Untitled';
+    try {
+      const path = await this.alloc.allocateFree(`docx:${t.meta.id}`, t.folderPath, title, '.docx', this.isMissing, this.mayReplaceBinary);
+      const file = await this.deps.client.getDocx(t.meta.id);
+      if (!hasZipSignature(file.bytes)) throw new Error('Quip did not return a Word document');
+      await this.writeRecorded(path, file.bytes);
+      flags.files.add(path);
+      flags.sidecars.add(path);
+      return `> Word copy as Quip exports it (without comments): [${escapeInline(`${title}.docx`)}](${relativeLink(t.path, path)})`;
+    } catch (err) {
+      if (err instanceof AuthError || isAbortError(err) || this.deps.signal?.aborted) throw err;
+      warnings.push({ code: 'docx-failed', detail: err instanceof QuipHttpError ? `HTTP ${err.status}` : errMessage(err) });
+      if (isRetryable(err)) flags.retry = true;
+      return '';
+    }
+  }
+
+  private composeNote(t: PlannedThread, body: string, copyLines: string[], comments: string, embeds: Record<string, number>): string {
     const { meta } = t;
     const title = meta.title.trim() || 'Untitled';
     const fm = frontMatter({
@@ -1032,7 +1058,7 @@ export class Exporter {
     let content = body.trim();
     if (!/^# /.test(content)) content = `# ${escapeInline(title)}${content ? `\n\n${content}` : ''}`;
     if (meta.movedTo) content = content.replace(/^(# .*\n?)/, `$1\n> [!info] This Quip document was moved to ${meta.movedTo}\n`);
-    if (xlsxLine) content = `${content}\n\n${xlsxLine}`;
+    for (const line of copyLines) if (line) content = `${content}\n\n${line}`;
     return `${fm}\n\n${content.trimEnd()}\n${comments ? `\n${comments}` : ''}`;
   }
 
