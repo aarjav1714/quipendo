@@ -50,6 +50,12 @@ export const DOC_SCHEME = 'quip-doc:';
 /** Separates a document id from the number of its link variant: `quip-doc:ID~2` is the third distinct address that links to ID. */
 export const DOC_VARIANT = '~';
 
+/**
+ * Quip marks highlighted text with an `annotationid` such as `temp:C:ObA…`, and a comment says which section it is
+ * attached to by id. Both sides are compared without the `temp:C:` prefix.
+ */
+export const normalizeAnnotationId = (id: string): string => id.trim().replace(/^temp:(?:C:)?/i, '');
+
 export interface ConvertResult {
   markdown: string;
   blobs: BlobRef[];
@@ -59,6 +65,8 @@ export interface ConvertResult {
   embeds: Record<string, number>;
   warnings: Warning[];
   unknownUserIds: string[];
+  /** Footnote labels (from `ConvertOptions.anchors`) that were placed in the text, once each. */
+  placedAnchors: string[];
 }
 
 export interface ConvertOptions {
@@ -70,4 +78,9 @@ export interface ConvertOptions {
   spreadsheetThread?: boolean;
   /** IANA time zone used to read date-only values (default UTC). */
   timeZone?: string;
+  /**
+   * Footnote labels for comments, by normalized annotation id (see `normalizeAnnotationId`). Highlighted text with
+   * a listed id gets a footnote reference such as `[^c1]` right after it.
+   */
+  anchors?: ReadonlyMap<string, string>;
 }

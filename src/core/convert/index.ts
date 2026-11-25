@@ -33,5 +33,6 @@ export function htmlToMarkdown(html: string, options: ConvertOptions, parse: Htm
     embeds: cx.embeds,
     warnings: cx.warnings,
     unknownUserIds: [...cx.unknownUsers],
+    placedAnchors: [...cx.placedAnchors],
   };
 }

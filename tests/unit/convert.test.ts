@@ -7,6 +7,43 @@ import type { ConvertOptions } from '../../src/core/types';
 const convert = (html: string, extra: Partial<ConvertOptions> = {}) => htmlToMarkdown(html, { threadId: 'T1abcdefghi', ...extra });
 const md = (html: string, extra: Partial<ConvertOptions> = {}) => convert(html, extra).markdown.trimEnd();
 
+describe('comment anchors', () => {
+  const anchors = new Map([
+    ['SecA', 'c1'],
+    ['SecB', 'c2'],
+  ]);
+  const span = (id: string, text: string): string => `<span annotationid="temp:C:${id}" class="c9 h2" id="temp:C:${id}">${text}</span>`;
+
+  it('puts a footnote reference right after the highlighted text Quip marked for a comment', () => {
+    const r = convert(`<p>Some ${span('SecA', 'highlighted words')} and ${span('SecB', 'more')}.</p>`, { anchors });
+    expect(r.markdown.trim()).toBe('Some highlighted words[^c1] and more[^c2].');
+    expect(r.placedAnchors).toEqual(['c1', 'c2']);
+  });
+
+  it('compares ids without the temp:C: prefix, and places each footnote once', () => {
+    const r = convert(`<p>${span('SecA', 'one')} then ${span('SecA', 'again')}</p>`, { anchors: new Map([['SecA', 'c1']]) });
+    expect(r.markdown.trim()).toBe('one[^c1] then again');
+    expect(r.placedAnchors).toEqual(['c1']);
+  });
+
+  it('leaves highlighted text alone when no comment is attached to it, and without any anchors', () => {
+    expect(convert(`<p>${span('Other', 'plain')}</p>`, { anchors }).placedAnchors).toEqual([]);
+    expect(md(`<p>${span('Other', 'plain')}</p>`, { anchors })).toBe('plain');
+    expect(md(`<p>${span('SecA', 'plain')}</p>`)).toBe('plain');
+  });
+
+  it('keeps the reference out of link text, and inside the formatting around it', () => {
+    expect(md(`<p><a href="https://example.com/x">${span('SecA', 'a link')}</a> and <b>${span('SecB', 'bold')}</b></p>`, { anchors })).toBe('[a link](https://example.com/x)[^c1] and **bold[^c2]**');
+  });
+
+  it('works in headings, list items and table cells', () => {
+    expect(md(`<h2>${span('SecA', 'Title')}</h2>`, { anchors })).toBe('## Title[^c1]');
+    expect(md(`<ul><li>${span('SecA', 'item')}</li></ul>`, { anchors })).toContain('item[^c1]');
+    const table = md(`<table><tbody><tr><td>${span('SecA', 'cell')}</td><td>x</td></tr></tbody></table>`, { anchors });
+    expect(table).toContain('cell[^c1]');
+  });
+});
+
 describe('inline formatting and escaping', () => {
   it('maps emphasis tags and keeps whitespace outside the markers', () => {
     expect(md('<p>a <b> bold </b> <i>it</i> <s>gone</s> <u>und</u></p>')).toBe('a  **bold**  *it* ~~gone~~ <u>und</u>');

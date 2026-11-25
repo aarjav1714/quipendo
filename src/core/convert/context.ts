@@ -2,6 +2,7 @@ import {
   BLOB_SCHEME,
   DOC_SCHEME,
   DOC_VARIANT,
+  normalizeAnnotationId,
   type BlobRef,
   type ConvertOptions,
   type Warning,
@@ -17,6 +18,10 @@ export class Cx {
   readonly unknownUsers = new Set<string>();
   /** Ordered-list counters by depth, used to honour "continue numbering". */
   readonly numbering: number[] = [];
+  /** Footnote labels placed so far, once each. */
+  readonly placedAnchors = new Set<string>();
+  /** While set, footnote references are collected here instead of returned, so they can be put after a link rather than inside its text. */
+  anchorSink: string[] | undefined;
 
   private readonly docVariants = new Map<string, string[]>();
   private readonly blobKeys = new Set<string>();
@@ -64,6 +69,17 @@ export class Cx {
     const key = index === 0 ? idOrSecretPath : `${idOrSecretPath}${DOC_VARIANT}${index}`;
     this.docUrls[key] = href;
     return `${DOC_SCHEME}${key}`;
+  }
+
+  /** The footnote reference for highlighted text with this annotation id, if a comment is attached to it and it was not placed yet. */
+  anchor(rawId: string): string {
+    const label = this.opts.anchors?.get(normalizeAnnotationId(rawId));
+    if (!label || this.placedAnchors.has(label)) return '';
+    this.placedAnchors.add(label);
+    const marker = `[^${label}]`;
+    if (!this.anchorSink) return marker;
+    this.anchorSink.push(marker);
+    return '';
   }
 
   userName(id: string): string {

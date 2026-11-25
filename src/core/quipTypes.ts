@@ -28,6 +28,10 @@ export interface QuipMessage {
   files: Array<{ hash: string; name: string }>;
   /** True when the message is a comment anchored to highlighted text. */
   anchored: boolean;
+  /** The section the comment is attached to; replies to a comment share it. */
+  annotationId?: string;
+  /** Sections the comment highlights, when Quip says which. */
+  highlightedIds?: string[];
   mentionUserIds: string[];
 }
 

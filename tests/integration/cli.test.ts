@@ -4,7 +4,7 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { main, USAGE, type CliIo } from '../../src/node/cli';
-import { F_PROJ, SITE, T_READING_SECRET, TOKEN } from '../mock/fixture';
+import { F_PROJ, SITE, T_READING, T_READING_SECRET, TOKEN } from '../mock/fixture';
 import { startMockQuip, type MockQuip } from '../mock/quipMock';
 import { listTree, virtualClock } from '../helpers/env';
 
@@ -84,6 +84,22 @@ describe('exporting an account', () => {
     expect(r.code).toBe(0);
     expect((await visible()).filter((p) => p.endsWith('.docx'))).toEqual(['Private/Notes.docx', 'Private/Reading Log.docx']);
     expect(await readFile(join(dir, 'Private/Reading Log.md'), 'utf8')).toContain('[Reading Log.docx](Reading%20Log.docx)');
+  });
+
+  it('puts comments on highlighted text next to it, unless --no-anchor-comments', async () => {
+    const reading = mock.fixture.threads[T_READING];
+    if (reading?.pages[0]) reading.pages[0] = reading.pages[0].replace('for the club', "for the <span annotationid='temp:C:ann1'>club</span>");
+    await run(['--out', dir, '--limit', '1']);
+    expect(await readFile(join(dir, 'Private/Reading Log.md'), 'utf8')).toContain('for the club[^c1].');
+    const plain = await mkdtemp(join(tmpdir(), 'quip-cli-plain-'));
+    try {
+      await run(['--out', plain, '--limit', '1', '--no-anchor-comments']);
+      const note = await readFile(join(plain, 'Private/Reading Log.md'), 'utf8');
+      expect(note).not.toContain('[^c1]');
+      expect(note).toContain('*on highlighted text*');
+    } finally {
+      await rm(plain, { recursive: true, force: true });
+    }
   });
 
   it('--edit-history keeps the raw edit records, and cannot be combined with --no-raw', async () => {

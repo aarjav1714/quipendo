@@ -113,14 +113,19 @@ export function normalizeMessage(raw: unknown): QuipMessage | undefined {
   for (const f of Array.isArray(raw.files) ? raw.files : []) {
     if (isObj(f) && str(f.hash)) files.push({ hash: String(f.hash), name: typeof f.name === 'string' ? f.name : '' });
   }
+  const annotation = isObj(raw.annotation) ? raw.annotation : undefined;
   const msg: QuipMessage = {
     id,
     createdUsec: created,
     text: typeof raw.text === 'string' ? raw.text : '',
     files,
-    anchored: isObj(raw.annotation),
+    anchored: annotation !== undefined,
     mentionUserIds: strArray(raw.mention_user_ids),
   };
+  const annotationId = annotation ? str(annotation.id) : undefined;
+  if (annotationId) msg.annotationId = annotationId;
+  const highlighted = annotation ? strArray(annotation.highlighted_section_ids ?? annotation.highlight_section_ids) : [];
+  if (highlighted.length > 0) msg.highlightedIds = highlighted;
   const authorId = str(raw.author_id);
   if (authorId) msg.authorId = authorId;
   const authorName = str(raw.author_name);

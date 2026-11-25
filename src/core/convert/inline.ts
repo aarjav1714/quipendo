@@ -51,7 +51,20 @@ export function renderImage(cx: Cx, img: Element): string {
 }
 
 function renderLink(cx: Cx, a: Element, mode: InlineMode): string {
+  // A footnote reference inside link text would break the link, so references found there go after it.
+  const outer = cx.anchorSink;
+  cx.anchorSink = [];
   const inner = renderInline(cx, a, mode);
+  const hoisted = cx.anchorSink.join('');
+  cx.anchorSink = outer;
+  if (hoisted) {
+    if (outer) outer.push(hoisted);
+    else return `${renderLinkText(cx, a, inner)}${hoisted}`;
+  }
+  return renderLinkText(cx, a, inner);
+}
+
+function renderLinkText(cx: Cx, a: Element, inner: string): string {
   const href = a.getAttribute('href');
   const url = classifyUrl(href);
   if (url.kind === 'none') return inner;
@@ -75,6 +88,13 @@ function renderLink(cx: Cx, a: Element, mode: InlineMode): string {
 }
 
 export function renderInlineNode(cx: Cx, node: Node, mode: InlineMode): string {
+  const out = renderInlineNodeText(cx, node, mode);
+  // Text Quip has highlighted because a comment is attached to it: mark the spot, so the comment can be found.
+  const annotation = node.nodeType === 1 ? (node as Element).getAttribute('annotationid') : null;
+  return annotation ? `${out}${cx.anchor(annotation)}` : out;
+}
+
+function renderInlineNodeText(cx: Cx, node: Node, mode: InlineMode): string {
   if (node.nodeType === 3) {
     return escapeInline(collapseWs(stripZeroWidth(node.nodeValue ?? '')));
   }

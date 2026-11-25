@@ -9,6 +9,7 @@ import { AuthError, READ_ONLY_ENDPOINTS } from '../../src/core/quipClient';
 import { createSession } from '../../src/core/session';
 import {
   ANN,
+  B_FILE,
   B_OK,
   DOCX_BYTES,
   F_ARCH,
@@ -20,6 +21,7 @@ import {
   F_STAR,
   F_TRASH,
   ME,
+  PDF_BYTES,
   PNG_1X1,
   SITE,
   T_LOOSE,
@@ -31,6 +33,7 @@ import {
   T_SLIDES,
   TOKEN,
   XLSX_BYTES,
+  type FixtureMessage,
 } from '../mock/fixture';
 import { startMockQuip, type MockOptions, type MockQuip } from '../mock/quipMock';
 import { NodeFsSink, listTree, parseHtml, virtualClock } from '../helpers/env';
@@ -599,6 +602,81 @@ describe('the experimental edit history', () => {
     expect(summary.editHistorySaved).toBe(0);
     expect(await read('Private/Reading Log.md', refused)).toContain('# Reading Log');
     expect((await runAll({ saveEditHistory: true }, refused)).docs).toMatchObject({ exported: 0, skipped: 9 }); // a refusal is not retried on every run
+  });
+});
+
+describe('comments next to the text they refer to', () => {
+  const U = 1_700_000_000_000_000;
+  const mark = (id: string, text: string): string => `<span annotationid='temp:C:${id}' class='c9 h2' id='temp:C:${id}'>${text}</span>`;
+  const remark = (n: number, text: string, extra: Record<string, unknown> = {}): FixtureMessage => ({ id: `m${n}`, author_id: ANN.id, author_name: ANN.name, created_usec: U + n * 1000, text, ...extra });
+
+  async function annotated(): Promise<Ctx> {
+    const c = await setup();
+    const notes = c.mock.fixture.threads[T_NOTES_A];
+    if (!notes) throw new Error('fixture changed');
+    notes.pages = [`<h1>Notes</h1><p class='line'>Some ${mark('SecA', 'highlighted words')} and ${mark('SecB', 'more text')}.</p>`];
+    notes.messages = [
+      remark(1, 'First remark\nsecond line', { annotation: { id: 'SecA' } }),
+      remark(2, 'A reply', { author_id: ME.id, author_name: ME.name, annotation: { id: 'SecA' } }),
+      remark(3, 'See attached', { annotation: { id: 'SecB' }, files: [{ hash: B_FILE, name: 'receipt.pdf' }] }),
+      remark(4, 'General conversation'),
+      remark(5, 'On text that is gone', { annotation: { id: 'Missing' } }),
+    ];
+    c.mock.fixture.blobs[`${T_NOTES_A}/${B_FILE}`] = { type: 'application/pdf', bytes: PDF_BYTES };
+    return c;
+  }
+
+  it('puts a comment and its replies in one footnote at the text, and keeps the rest in the list', async () => {
+    const c = await annotated();
+    const summary = await runAll({}, c);
+    const note = await read('Private/Notes.md', c);
+    expect(note).toContain('Some highlighted words[^c1] and more text[^c2].');
+    expect(note).toContain('[^c1]: **Ann Lee** · 2023-11-14 22:13 UTC\n\n    First remark\n    second line\n\n    **Jane Doe** · 2023-11-14 22:13 UTC\n\n    A reply\n');
+    expect(note).toContain('[^c2]: **Ann Lee** · 2023-11-14 22:13 UTC\n\n    See attached\n    📎 [receipt.pdf](../_attachments/NOTESthrdA1/receipt.pdf)');
+    // Not anchored, or anchored to text that is no longer in the document: listed at the end as before.
+    expect(note).toContain('## Comments and conversation\n\n> **Ann Lee** · 2023-11-14 22:13 UTC\n> General conversation');
+    expect(note).toContain('> **Ann Lee** · 2023-11-14 22:13 UTC · *on highlighted text*\n> On text that is gone');
+    expect(note).not.toContain('[^c3]');
+    expect(note.indexOf('[^c1]:')).toBeGreaterThan(note.indexOf('## Comments and conversation'));
+    expect(summary.comments).toBe(5 + 6); // this document's five, and the six in Reading Log
+  });
+
+  it('writes no list heading when every comment found its text', async () => {
+    const c = await annotated();
+    const notes = c.mock.fixture.threads[T_NOTES_A];
+    if (notes) notes.messages = [remark(1, 'Only remark', { annotation: { id: 'SecA' } })];
+    await runAll({}, c);
+    const note = await read('Private/Notes.md', c);
+    expect(note).toContain('highlighted words[^c1]');
+    expect(note).not.toContain('Comments and conversation');
+  });
+
+  it('can list every comment at the end instead, and switching rewrites the notes', async () => {
+    const c = await annotated();
+    await runAll({ anchorComments: false }, c);
+    const plain = await read('Private/Notes.md', c);
+    expect(plain).not.toContain('[^');
+    expect(plain).toContain('> **Ann Lee** · 2023-11-14 22:13 UTC · *on highlighted text*\n> First remark');
+    const again = await runAll({}, c);
+    expect(again.docs.exported).toBe(9); // every note is re-rendered: the choice is part of how it is written
+    expect(await read('Private/Notes.md', c)).toContain('highlighted words[^c1]');
+    expect((await runAll({}, c)).docs).toMatchObject({ exported: 0, skipped: 9 });
+  });
+
+  it('also finds the text by the sections a comment highlights', async () => {
+    const c = await annotated();
+    const notes = c.mock.fixture.threads[T_NOTES_A];
+    if (notes) notes.messages = [remark(1, 'By highlight', { annotation: { id: 'SomeOtherSection', highlighted_section_ids: ['temp:C:SecB'] } })];
+    await runAll({}, c);
+    expect(await read('Private/Notes.md', c)).toContain('more text[^c1]');
+  });
+
+  it('keeps what it needs to match comments to text in the raw archive', async () => {
+    const c = await annotated();
+    await runAll({}, c);
+    const saved = JSON.parse(await read(`.quip-raw/${T_NOTES_A}/messages.json`, c)) as Array<{ id: string; annotationId?: string }>;
+    expect(saved.find((m) => m.id === 'm1')?.annotationId).toBe('SecA');
+    expect(saved.find((m) => m.id === 'm4')?.annotationId).toBeUndefined();
   });
 });
 

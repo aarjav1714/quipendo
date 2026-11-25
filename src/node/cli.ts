@@ -31,6 +31,7 @@ Options:
       --scan-only      Read the folder structure and report what would be exported, without writing anything.
       --force          Export every document again, even if it is unchanged since the last run.
       --no-comments    Leave out comments and conversation.
+      --no-anchor-comments  List every comment at the end instead of putting those on highlighted text next to that text, as footnotes.
       --no-raw         Do not keep Quip's original HTML and metadata (.quip-raw).
       --no-xlsx        Do not save spreadsheets as .xlsx next to their notes.
       --edit-history   Experimental: also keep Quip's raw edit records for each document in the raw archive (one more request each).
@@ -110,6 +111,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
         'scan-only': { type: 'boolean' },
         force: { type: 'boolean' },
         'no-comments': { type: 'boolean' },
+        'no-anchor-comments': { type: 'boolean' },
         'no-raw': { type: 'boolean' },
         'no-xlsx': { type: 'boolean' },
         docx: { type: 'boolean' },
@@ -212,6 +214,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
       allRootIds: roots.filter((r) => r.kind !== 'starred').map((r) => r.id),
       ownerId: user.id,
       includeComments: !values['no-comments'],
+      anchorComments: !values['no-anchor-comments'],
       keepRaw: !values['no-raw'],
       saveXlsx: !values['no-xlsx'],
       saveDocx: values.docx === true,

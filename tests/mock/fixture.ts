@@ -50,7 +50,7 @@ export interface FixtureMessage {
   created_usec: number;
   text: string;
   mention_user_ids?: string[];
-  annotation?: { id: string };
+  annotation?: { id: string; highlighted_section_ids?: string[] };
   files?: Array<{ hash: string; name: string }>;
 }
 

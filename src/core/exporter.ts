@@ -8,14 +8,14 @@ import { AuthError, QuipHttpError } from './quipClient';
 import type { OwnedThread, QuipApi, QuipMessage } from './quipTypes';
 import { attachmentExtension, rewriteSentinels, stripExtension } from './rewrite';
 import type { Sink } from './sink';
-import type { BlobRef, FolderMeta, ThreadMeta, Warning } from './types';
+import { normalizeAnnotationId, type BlobRef, type FolderMeta, type ThreadMeta, type Warning } from './types';
 
 export const TOOL_NAME = 'Quipendo';
 /** Names this tool wrote into its report before it was renamed; still recognised so an earlier export keeps updating its own report. */
 const PREVIOUS_TOOL_NAMES = ['quip-md-export'];
 export const TOOL_VERSION = '0.1.0';
 /** Bump whenever the converter or note format changes, so existing notes are re-rendered on the next run. */
-export const FORMAT_VERSION = 5;
+export const FORMAT_VERSION = 6;
 // The state folder keeps its pre-rename name: renaming it would make every earlier export look like it has no resume state.
 export const STATE_PATH = '.quip-md-export/state.json';
 export const REPORT_JSON_PATH = '.quip-md-export/report.json';
@@ -42,6 +42,11 @@ export interface ExportOptions {
   /** The signed-in user: only unfiled documents authored by this user are exported. */
   ownerId: string | undefined;
   includeComments: boolean;
+  /**
+   * Put each comment on highlighted text next to that text, as a footnote, instead of listing it at the end. A
+   * comment whose text cannot be found in the document stays in the list at the end.
+   */
+  anchorComments: boolean;
   /** Keep Quip's original HTML and metadata under `.quip-raw/`. */
   keepRaw: boolean;
   /** Save Quip's XLSX export next to notes that contain spreadsheets (it keeps formulas, which HTML does not). */
@@ -77,6 +82,7 @@ export const DEFAULT_OPTIONS: ExportOptions = {
   allRootIds: [],
   ownerId: undefined,
   includeComments: true,
+  anchorComments: true,
   keepRaw: true,
   saveXlsx: true,
   saveDocx: false,
@@ -281,6 +287,40 @@ const hasPdfSignature = (b: Uint8Array): boolean => {
   for (let i = 0; i < end; i += 1) if (b[i] === 0x25 && b[i + 1] === 0x50 && b[i + 2] === 0x44 && b[i + 3] === 0x46) return true;
   return false;
 };
+/** The comment threads that are attached to highlighted text, and the footnote label each one would get. */
+interface AnchorPlan {
+  /** Footnote label by normalized annotation or highlight id, for the converter. */
+  labels: Map<string, string>;
+  /** One entry per comment and its replies, in the order the comments were first made. */
+  threads: Array<{ label: string; messages: QuipMessage[] }>;
+}
+
+const hasContent = (m: QuipMessage): boolean => m.text.trim() !== '' || m.files.length > 0;
+
+/** Groups comments by the section they are attached to (replies share it) and gives each group a footnote label. */
+function planAnchors(messages: QuipMessage[]): AnchorPlan | undefined {
+  const groups = new Map<string, QuipMessage[]>();
+  for (const m of messages) {
+    if (!m.annotationId || !hasContent(m)) continue;
+    const group = groups.get(m.annotationId) ?? [];
+    group.push(m);
+    groups.set(m.annotationId, group);
+  }
+  if (groups.size === 0) return undefined;
+  const labels = new Map<string, string>();
+  const threads: AnchorPlan['threads'] = [];
+  for (const [annotationId, group] of groups) {
+    const label = `c${threads.length + 1}`;
+    threads.push({ label, messages: group });
+    labels.set(normalizeAnnotationId(annotationId), label);
+  }
+  // Also the sections a comment highlights, when Quip names them, unless another comment already owns the id.
+  for (const [i, thread] of threads.entries()) {
+    for (const m of thread.messages) for (const id of m.highlightedIds ?? []) if (!labels.has(normalizeAnnotationId(id))) labels.set(normalizeAnnotationId(id), `c${i + 1}`);
+  }
+  return { labels, threads };
+}
+
 /** First line and tool line of the report, which is how a report written by this tool is recognised. */
 const isOwnReport = (text: string): boolean => {
   const head = text.slice(0, 600);
@@ -345,7 +385,7 @@ export class Exporter {
   private fingerprint(): string {
     const o = this.opts;
     // The suffix appears only when the option is on, so an export made without it keeps its fingerprint.
-    return `v${FORMAT_VERSION}c${o.includeComments ? 1 : 0}x${o.saveXlsx ? 1 : 0}${o.saveDocx ? 'd1' : ''}${o.saveEditHistory && o.keepRaw ? 'h1' : ''}`;
+    return `v${FORMAT_VERSION}c${o.includeComments ? 1 : 0}x${o.saveXlsx ? 1 : 0}${o.includeComments && !o.anchorComments ? 'a0' : ''}${o.saveDocx ? 'd1' : ''}${o.saveEditHistory && o.keepRaw ? 'h1' : ''}`;
   }
 
   // ---- state and naming ------------------------------------------------
@@ -861,24 +901,32 @@ export class Exporter {
     let xlsxLine = '';
     let wordLine = '';
 
+    let messages: QuipMessage[] = [];
+    let anchorPlan: AnchorPlan | undefined;
+    const placed = new Set<string>();
     if (meta.type === 'slides') {
       body = await this.slidesBody(t, warnings, flags);
     } else {
       const rawHtml = await this.stage('fetch', () => client.getThreadHtml(meta.id));
       if (this.opts.keepRaw) await writeRaw('body.html', rawHtml);
       if (rawHtml.trim() === '') warnings.push({ code: 'empty-html', detail: 'Quip returned no content (often a permissions issue)' });
-      body = await this.stage('convert', () => this.convert(t, rawHtml, warnings, embeds, flags, linkLog));
+      // The comments come first: the text they are attached to is marked while the document is converted.
+      if (this.opts.includeComments) {
+        const list = await this.stage('comments', () => client.getMessages(meta.id));
+        messages = list.messages;
+        if (list.incomplete) warnings.push({ code: 'comments-incomplete', detail: 'more comments share one timestamp than Quip lets the tool list' });
+        if (this.opts.anchorComments) anchorPlan = planAnchors(messages);
+      }
+      const converted = await this.stage('convert', () => this.convert(t, rawHtml, warnings, embeds, flags, linkLog, anchorPlan?.labels));
+      body = converted.markdown;
+      for (const label of converted.placedAnchors) placed.add(label);
       xlsxLine = await this.saveSpreadsheet(t, embeds, warnings, flags);
       wordLine = await this.saveWordCopy(t, warnings, flags);
     }
 
     let comments = '';
-    let messages: QuipMessage[] = [];
     if (this.opts.includeComments && meta.type !== 'slides') {
-      const list = await this.stage('comments', () => client.getMessages(meta.id));
-      messages = list.messages;
-      if (list.incomplete) warnings.push({ code: 'comments-incomplete', detail: 'more comments share one timestamp than Quip lets the tool list' });
-      comments = await this.renderComments(t, messages, warnings, flags, linkLog);
+      comments = await this.renderComments(t, messages, warnings, flags, linkLog, anchorPlan, placed);
     }
 
     if (this.opts.saveEditHistory && this.opts.keepRaw && meta.type !== 'slides') {
@@ -947,9 +995,23 @@ export class Exporter {
     }
   }
 
-  private async convert(t: PlannedThread, html: string, warnings: Warning[], embeds: Record<string, number>, flags: Flags, linkLog: LinkLog): Promise<string> {
+  private async convert(
+    t: PlannedThread,
+    html: string,
+    warnings: Warning[],
+    embeds: Record<string, number>,
+    flags: Flags,
+    linkLog: LinkLog,
+    anchors?: ReadonlyMap<string, string>,
+  ): Promise<{ markdown: string; placedAnchors: string[] }> {
     const { meta } = t;
-    const options = { threadId: meta.id, spreadsheetThread: meta.type === 'spreadsheet', userNames: this.users, ...(this.opts.timeZone ? { timeZone: this.opts.timeZone } : {}) };
+    const options = {
+      threadId: meta.id,
+      spreadsheetThread: meta.type === 'spreadsheet',
+      userNames: this.users,
+      ...(this.opts.timeZone ? { timeZone: this.opts.timeZone } : {}),
+      ...(anchors ? { anchors } : {}),
+    };
     let result = htmlToMarkdown(html, options, this.deps.parseHtml);
     const unknown = result.unknownUserIds.filter((id) => !this.users.has(id));
     if (unknown.length > 0) {
@@ -985,7 +1047,7 @@ export class Exporter {
     }
     for (const key of rewritten.unresolvedDocs) linkLog.unresolved.add(key);
     if (rewritten.unresolvedDocs.length > 0) warnings.push({ code: 'link-outside-export', detail: rewritten.unresolvedDocs.join(', ') });
-    return rewritten.markdown.trimEnd();
+    return { markdown: rewritten.markdown.trimEnd(), placedAnchors: result.placedAnchors };
   }
 
   /** Person @mentions use document-style URLs, so ids that match no exported document are checked against the users API once. */
@@ -1158,8 +1220,34 @@ export class Exporter {
     return out + escapeInline(text.slice(last));
   }
 
-  private async renderComments(t: PlannedThread, messages: QuipMessage[], warnings: Warning[], flags: Flags, linkLog: LinkLog): Promise<string> {
-    const meta = t.meta;
+  /** One comment as a header line (who and when) and its body lines (text and attachments). Undefined when there is nothing to show. */
+  private async commentLines(t: PlannedThread, m: QuipMessage, warnings: Warning[], flags: Flags, linkLog: LinkLog): Promise<{ header: string; body: string[] } | undefined> {
+    if (!hasContent(m)) return undefined;
+    const who = m.authorName ?? (m.authorId ? this.users.get(m.authorId) : undefined) ?? 'Unknown';
+    const when = usecToIso(m.createdUsec)?.replace('T', ' ').slice(0, 16);
+    const body: string[] = [];
+    for (const line of m.text.replace(/\r\n?/g, '\n').split('\n')) body.push(escapeBlockStart(this.linkifyComment(line, t.path, linkLog)));
+    for (const file of m.files) {
+      const path = await this.ensureBlob({ threadId: t.meta.id, blobId: file.hash, kind: 'file', ...(file.name ? { hint: file.name } : {}) }, warnings, flags);
+      const label = escapeInline(file.name || 'attachment');
+      body.push(path ? `📎 [${label}](${relativeLink(t.path, path)})` : `📎 ${label} *(attachment unavailable)*`);
+    }
+    return { header: `**${escapeInline(who)}**${when ? ` · ${when} UTC` : ''}`, body };
+  }
+
+  /**
+   * The comments of a note. Comments whose highlighted text was found in the document become footnotes (one per
+   * comment and its replies); the rest are listed at the end, with a note when they refer to highlighted text.
+   */
+  private async renderComments(
+    t: PlannedThread,
+    messages: QuipMessage[],
+    warnings: Warning[],
+    flags: Flags,
+    linkLog: LinkLog,
+    plan?: AnchorPlan,
+    placed: ReadonlySet<string> = new Set(),
+  ): Promise<string> {
     const wanted = new Set<string>();
     for (const m of messages) {
       if (m.authorId) wanted.add(m.authorId);
@@ -1168,22 +1256,32 @@ export class Exporter {
     const missing = [...wanted].filter((id) => !this.users.has(id));
     if (missing.length > 0) for (const [id, name] of await this.deps.client.getUsers(missing)) this.users.set(id, name);
 
+    const footnoted = new Set<string>();
+    const footnotes: string[] = [];
+    for (const thread of plan?.threads ?? []) {
+      if (!placed.has(thread.label)) continue;
+      const parts: string[] = [];
+      for (const m of thread.messages) {
+        const lines = await this.commentLines(t, m, warnings, flags, linkLog);
+        if (!lines) continue;
+        footnoted.add(m.id);
+        parts.push(parts.length === 0 ? `[^${thread.label}]: ${lines.header}` : `    ${lines.header}`, '', ...lines.body.map((l) => (l ? `    ${l}` : '')), '');
+      }
+      if (parts.length > 0) footnotes.push(parts.join('\n').trimEnd());
+    }
+
     const blocks: string[] = [];
     for (const m of messages) {
-      if (!m.text.trim() && m.files.length === 0) continue;
-      const who = m.authorName ?? (m.authorId ? this.users.get(m.authorId) : undefined) ?? 'Unknown';
-      const when = usecToIso(m.createdUsec)?.replace('T', ' ').slice(0, 16);
-      const lines = [`**${escapeInline(who)}**${when ? ` · ${when} UTC` : ''}${m.anchored ? ' · *on highlighted text*' : ''}`];
-      for (const line of m.text.replace(/\r\n?/g, '\n').split('\n')) lines.push(escapeBlockStart(this.linkifyComment(line, t.path, linkLog)));
-      for (const file of m.files) {
-        const path = await this.ensureBlob({ threadId: meta.id, blobId: file.hash, kind: 'file', ...(file.name ? { hint: file.name } : {}) }, warnings, flags);
-        const label = escapeInline(file.name || 'attachment');
-        lines.push(path ? `📎 [${label}](${relativeLink(t.path, path)})` : `📎 ${label} *(attachment unavailable)*`);
-      }
-      blocks.push(lines.map((l) => (l ? `> ${l}` : '>')).join('\n'));
+      if (footnoted.has(m.id)) continue;
+      const lines = await this.commentLines(t, m, warnings, flags, linkLog);
+      if (!lines) continue;
+      const all = [`${lines.header}${m.anchored ? ' · *on highlighted text*' : ''}`, ...lines.body];
+      blocks.push(all.map((l) => (l ? `> ${l}` : '>')).join('\n'));
     }
-    this.commentCount += blocks.length;
-    return blocks.length > 0 ? `## Comments and conversation\n\n${blocks.join('\n\n')}\n` : '';
+    this.commentCount += blocks.length + footnoted.size;
+    let out = blocks.length > 0 ? `## Comments and conversation\n\n${blocks.join('\n\n')}\n` : '';
+    if (footnotes.length > 0) out += `${out ? '\n' : ''}${footnotes.join('\n\n')}\n`;
+    return out;
   }
 }
 
