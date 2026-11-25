@@ -142,13 +142,17 @@ describe(`the extension in ${driver.name}`, () => {
     // The heading is the wordmark picture, in the version that suits the page's colour scheme.
     const wordmark = () => page.evaluate(() => ({ width: (document.querySelector('h1 img') as HTMLImageElement | null)?.naturalWidth ?? 0, src: (document.querySelector('h1 img') as HTMLImageElement | null)?.currentSrc ?? '' }));
     await expect(page.$$eval('h1', (headings) => headings.filter((h) => (h.querySelector('img') as HTMLImageElement | null)?.alt === 'Quipendo').length)).resolves.toBe(1);
-    expect(await wordmark()).toMatchObject({ src: expect.stringMatching(/wordmark-on-light\.svg$/) });
-    expect((await wordmark()).width).toBeGreaterThan(0);
+    // A browser that cannot be told which scheme to prefer follows the computer's appearance, which changes with the time of day.
     if (driver.setColorScheme) {
+      await driver.setColorScheme(page, 'light');
+      await expect.poll(async () => (await wordmark()).src).toMatch(/wordmark-on-light\.svg$/);
       await driver.setColorScheme(page, 'dark');
       await expect.poll(async () => (await wordmark()).src).toMatch(/wordmark-on-dark\.svg$/);
-      await expect.poll(async () => (await wordmark()).width).toBeGreaterThan(0);
+    } else {
+      const dark = await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches);
+      expect((await wordmark()).src).toMatch(dark ? /wordmark-on-dark\.svg$/ : /wordmark-on-light\.svg$/);
     }
+    await expect.poll(async () => (await wordmark()).width).toBeGreaterThan(0);
     // Some browsers hand the icon paths back as full addresses of the extension.
     await expect(page.evaluate(() => chrome.runtime.getManifest().icons)).resolves.toMatchObject({ '16': expect.stringMatching(/icons\/icon-16\.png$/), '128': expect.stringMatching(/icons\/icon-128\.png$/) });
     // Where the browser has no request-blocking of its own, the page says so instead of claiming a guard it does not have.
