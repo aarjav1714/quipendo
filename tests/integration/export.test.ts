@@ -80,7 +80,7 @@ function makeSession(options: Partial<ExportOptions> = {}, extra: { onEvent?: (e
 
 const read = (rel: string, c: Ctx = ctx): Promise<string> => readFile(join(c.dir, rel), 'utf8');
 const visible = async (c: Ctx = ctx): Promise<string[]> => (await listTree(c.dir)).filter((p) => !p.startsWith('.'));
-const notes = async (c: Ctx = ctx): Promise<string[]> => (await visible(c)).filter((p) => p.endsWith('.md') && !p.startsWith('_Quip'));
+const notes = async (c: Ctx = ctx): Promise<string[]> => (await visible(c)).filter((p) => p.endsWith('.md') && !p.startsWith('_Quip') && p !== '_Index.md');
 const requestsTo = (pattern: RegExp, c: Ctx = ctx): number => c.mock.requests.filter((r) => pattern.test(r.path)).length;
 
 async function runAll(options: Partial<ExportOptions> = {}, c: Ctx = ctx): Promise<ExportSummary> {
@@ -106,6 +106,7 @@ describe('full export', () => {
       'Private/notes (2).md',
       'Team Shared/',
       'Team Shared/Shared doc.md',
+      '_Index.md',
       '_Quip export report.md',
       '_Unfiled/',
       '_Unfiled/Loose note.md',
@@ -115,6 +116,7 @@ describe('full export', () => {
       '_attachments/PLANthread1/spec.pdf',
       '_attachments/tREADINGth1/',
       '_attachments/tREADINGth1/receipt.pdf',
+      '_index.json',
     ]);
     expect(summary).toMatchObject({ stopReason: 'completed', aborted: false, docs: { planned: 9, exported: 9, skipped: 0, failed: 0, notAttempted: 0, slides: 1 }, folders: 4, comments: 6 });
     expect(summary.unreadableFolders).toEqual([{ id: 'fLOCKED0001', status: 403 }]);
@@ -400,6 +402,90 @@ describe('choosing what to export', () => {
     const second = await runAll({ sinceUsec: planned.updated });
     expect(await read('Private/Projects/Project Plan.md')).toContain('(https://acme.quip.com/tREADINGth1v/Reading-Log');
     expect(second.unresolvedLinks).toContain('tREADINGth1v');
+  });
+});
+
+describe('the index files', () => {
+  const indexJson = async (c: Ctx = ctx): Promise<{ kind: string; tool: string; documents: Array<Record<string, unknown>> }> => JSON.parse(await read('_index.json', c)) as never;
+
+  it('lists every exported document once, by folder, with its other folders and its spreadsheet, slide and other copies', async () => {
+    const summary = await runAll();
+    expect(summary.indexPath).toBe('_Index.md');
+    const md = await read('_Index.md');
+    expect(md).toMatch(/^# Quip export index\n\n- Tool: Quipendo 0\.1\.0\n- Updated: /);
+    expect(md).toContain('- Documents: 9');
+    expect(md).toContain('## Private\n');
+    expect(md).toContain('## Private/Projects\n');
+    expect(md).toContain('- [Reading Log](Private/Reading%20Log.md) · document · changed 2021-02-04 · also in Desktop · [xlsx](Private/Reading%20Log.xlsx)');
+    expect(md).toContain('- [Pitch deck](Private/Projects/Pitch%20deck.md) · slides · changed 2021-02-04 · [pdf](Private/Projects/Pitch%20deck.pdf)');
+    expect(md).toContain('[Q3/Q4: plan? \\<final>](Private/Q3-Q4%20-%20plan%20-%20final.md)');
+    expect(md).not.toMatch(/[^\n]\n## /); // a blank line before every section
+
+    const json = await indexJson();
+    expect(json).toMatchObject({ kind: 'quipendo-index', tool: 'Quipendo 0.1.0' });
+    expect(json.documents).toHaveLength(9);
+    expect(json.documents.find((d) => d.id === T_READING)).toEqual({
+      id: T_READING,
+      title: 'Reading Log',
+      type: 'document',
+      path: 'Private/Reading Log.md',
+      folder: 'Private',
+      also_in: ['Desktop'],
+      created: '2021-02-03T10:00:00.000Z',
+      updated: '2021-02-04T10:00:00.000Z',
+      author: 'Jane Doe',
+      url: 'https://acme.quip.com/tREADINGth1v',
+      embeds: ['spreadsheet'],
+      files: ['Private/Reading Log.xlsx'],
+    });
+  });
+
+  it('is not written by a scan, and nothing links to a note that is not there', async () => {
+    await makeSession().exporter.scan();
+    expect(await listTree(ctx.dir)).toEqual([]);
+    await runAll();
+    await rm(join(ctx.dir, 'Private/Reading Log.md'));
+    await rm(join(ctx.dir, 'Private/Projects/Budget.xlsx'));
+    // A later run that covers only one document still rewrites the index from everything exported so far.
+    const planned = ctx.mock.fixture.threads[T_PLAN] as { updated: number };
+    planned.updated += 5_000_000;
+    await runAll({ sinceUsec: planned.updated });
+    const json = await indexJson();
+    expect(json.documents.map((d) => d.id)).not.toContain(T_READING);
+    expect(json.documents).toHaveLength(8);
+    expect(json.documents.find((d) => d.id === T_SHEET)).not.toHaveProperty('files');
+  });
+
+  it('stays complete when a trial run is followed by the full export', async () => {
+    await runAll({ maxDocs: 2 });
+    expect((await indexJson()).documents).toHaveLength(2);
+    await runAll();
+    expect((await indexJson()).documents).toHaveLength(9);
+  });
+
+  it('keeps a file that is not its own, and writes beside it', async () => {
+    await writeFile(join(ctx.dir, '_Index.md'), 'MY OWN INDEX');
+    await writeFile(join(ctx.dir, '_index.json'), '{"mine":true}');
+    const first = await runAll();
+    expect(first.indexPath).toBe('_Index (2).md');
+    expect(await read('_Index.md')).toBe('MY OWN INDEX');
+    expect(await read('_index.json')).toBe('{"mine":true}');
+    expect(await read('_Index (2).md')).toMatch(/^# Quip export index\n/);
+    expect(JSON.parse(await read('_index (2).json'))).toMatchObject({ kind: 'quipendo-index' });
+    const second = await runAll();
+    expect(second.indexPath).toBe('_Index (2).md'); // its own is recognised and updated in place
+    expect(await visible()).not.toContain('_Index (3).md');
+  });
+
+  it('never lets a Quip document take the names of the index files', async () => {
+    const odd = await setup();
+    const loose = odd.mock.fixture.threads[T_LOOSE];
+    if (loose) loose.title = '_Index';
+    await runAll({ rootIds: [F_PRIV], threadIds: [T_LOOSE], includeUnfiled: false }, odd);
+    const tree = await visible(odd);
+    expect(tree).toContain('_Index (2).md');
+    expect(await read('_Index.md', odd)).toMatch(/^# Quip export index\n/);
+    expect((await indexJson(odd)).documents.some((d) => d.path === '_Index (2).md')).toBe(true);
   });
 });
 

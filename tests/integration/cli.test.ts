@@ -76,7 +76,7 @@ describe('exporting an account', () => {
   it('limits the number of documents for a trial run', async () => {
     const r = await run(['--out', dir, '--limit', '2']);
     expect(r.all).toMatch(/2 saved, 0 unchanged, 0 failed of 2 documents\./);
-    expect((await visible()).filter((p) => p.endsWith('.md') && !p.startsWith('_Quip'))).toHaveLength(2);
+    expect((await visible()).filter((p) => p.endsWith('.md') && !p.startsWith('_Quip') && p !== '_Index.md')).toHaveLength(2);
   });
 
   it('scans without writing anything or downloading a document', async () => {
@@ -131,7 +131,7 @@ describe('exporting one page', () => {
     expect(r.code).toBe(0);
     expect(r.out).toContain('Exporting the document "Reading Log".');
     expect(r.all).toMatch(/Done\. 1 saved/);
-    expect((await visible()).filter((p) => p.endsWith('.md') && !p.startsWith('_Quip'))).toEqual(['Reading Log.md']);
+    expect((await visible()).filter((p) => p.endsWith('.md') && !p.startsWith('_Quip') && p !== '_Index.md')).toEqual(['Reading Log.md']);
   });
 
   it('--from a folder exports everything inside it', async () => {
@@ -139,7 +139,7 @@ describe('exporting one page', () => {
     expect(r.code).toBe(0);
     expect(r.out).toContain('Exporting the folder "Projects" and everything inside it.');
     expect(r.all).toMatch(/Done\. 3 saved/);
-    expect((await visible()).filter((p) => p.endsWith('.md') && !p.startsWith('_Quip')).sort()).toEqual(['Projects/Budget.md', 'Projects/Pitch deck.md', 'Projects/Project Plan.md']);
+    expect((await visible()).filter((p) => p.endsWith('.md') && !p.startsWith('_Quip') && p !== '_Index.md').sort()).toEqual(['Projects/Budget.md', 'Projects/Pitch deck.md', 'Projects/Project Plan.md']);
   });
 
   it('explains a page it cannot use, without exporting anything', async () => {

@@ -1,8 +1,9 @@
 import { htmlToMarkdown, type HtmlParser } from './convert';
 import { digest, digestText } from './digest';
+import { INDEX_JSON_PATH, INDEX_MD_PATH, isOwnIndexJson, isOwnIndexMarkdown, renderIndexJson, renderIndexMarkdown, type IndexEntry } from './indexFiles';
 import { frontMatter, frontMatterHasId, relativeLink, usecToIso } from './links';
 import { escapeBlockStart, escapeInline } from './markdownUtils';
-import { PathAllocator, dirname } from './naming';
+import { PathAllocator, basename, dirname } from './naming';
 import { AuthError, QuipHttpError } from './quipClient';
 import type { OwnedThread, QuipApi, QuipMessage } from './quipTypes';
 import { attachmentExtension, rewriteSentinels, stripExtension } from './rewrite';
@@ -177,6 +178,8 @@ export interface ExportSummary {
   leftOut: Plan['leftOut'] & { since?: string };
   rateLimitPauses: number;
   reportPath: string;
+  /** The browsable index of everything exported so far. */
+  indexPath: string;
 }
 
 interface ThreadState {
@@ -198,6 +201,18 @@ interface ThreadState {
   rawFiles?: string[];
   /** The time zone dates were read in, kept only for documents whose content depends on it. */
   timeZone?: string;
+  /** What the index files say about this document, kept so that a partial run still produces a complete index. */
+  index?: {
+    title: string;
+    type: string;
+    folder?: string;
+    alsoIn?: string[];
+    createdUsec?: number;
+    author?: string;
+    url: string;
+    /** Spreadsheet, slide and Word copies saved next to the note. */
+    sidecars?: string[];
+  };
 }
 
 interface ExportState {
@@ -227,6 +242,8 @@ interface Flags {
   retry: boolean;
   /** Attachments and sidecars the note links to. */
   files: Set<string>;
+  /** Spreadsheet, slide and Word copies saved next to the note. */
+  sidecars: Set<string>;
 }
 
 const isAbortError = (err: unknown): boolean => err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError');
@@ -338,6 +355,8 @@ export class Exporter {
     }
     // Names this tool writes itself must never be handed to a Quip folder or document.
     this.alloc.reserve(REPORT_MD_PATH);
+    this.alloc.reserve(INDEX_MD_PATH);
+    this.alloc.reserve(INDEX_JSON_PATH);
     this.attachmentsRoot = this.alloc.allocate('dir:attachments', '', this.opts.attachmentsDir);
     this.unfiledRoot = this.alloc.allocate('dir:unfiled', '', this.opts.unfiledDir);
   }
@@ -666,7 +685,9 @@ export class Exporter {
       if ((i + 1) % 10 === 0) await this.saveState();
     }
 
-    const reportPath = await this.freeReportPath();
+    const reportPath = await this.freeOwnedPath(REPORT_MD_PATH, isOwnReport);
+    const indexPath = await this.freeOwnedPath(INDEX_MD_PATH, (head) => isOwnIndexMarkdown(head, TOOL_NAME));
+    const indexJsonPath = await this.freeOwnedPath(INDEX_JSON_PATH, (head) => isOwnIndexJson(head, TOOL_NAME));
     const finished = this.deps.now?.() ?? new Date();
     const summary: ExportSummary = {
       startedAt: started.toISOString(),
@@ -691,23 +712,77 @@ export class Exporter {
       leftOut: { ...plan.leftOut, ...(this.opts.sinceUsec !== undefined ? { since: usecToIso(this.opts.sinceUsec) as string } : {}) },
       rateLimitPauses: this.pauses,
       reportPath,
+      indexPath,
     };
     this.emit({ type: 'phase', phase: 'finish', message: stopReason === 'completed' ? 'Writing the report…' : 'Stopped. Progress is saved; run again to continue.' });
     await this.saveState();
     await this.deps.sink.writeFile(REPORT_JSON_PATH, JSON.stringify(summary, null, 1));
     await this.deps.sink.writeFile(reportPath, renderReport(summary, plan));
+    await this.writeIndexFiles(indexPath, indexJsonPath, finished);
     if (fatal) throw fatal;
     return summary;
   }
 
-  /** The report keeps its usual name unless a file there is not this tool's own report; then it takes a numbered name. */
-  private async freeReportPath(): Promise<string> {
+  /** A file this tool writes itself keeps its usual name unless something there is not its own; then it takes a numbered name. */
+  private async freeOwnedPath(base: string, isOwn: (head: string) => boolean): Promise<string> {
+    const dot = base.lastIndexOf('.');
     for (let n = 1; n < 1000; n += 1) {
-      const path = n === 1 ? REPORT_MD_PATH : REPORT_MD_PATH.replace(/\.md$/, ` (${n}).md`);
+      const path = n === 1 ? base : `${base.slice(0, dot)} (${n})${base.slice(dot)}`;
       const head = await this.deps.sink.readHead(path, 600);
-      if (head === undefined || isOwnReport(head)) return path;
+      if (head === undefined || isOwn(head)) return path;
     }
-    throw new Error('Could not find a free name for the export report.');
+    throw new Error(`Could not find a free name for ${base}.`);
+  }
+
+  /** What the index files say about a document, taken from its metadata and where its note went. */
+  private indexFor(t: PlannedThread, sidecars: Iterable<string>): NonNullable<ThreadState['index']> {
+    const { meta } = t;
+    const author = meta.authorId ? this.users.get(meta.authorId) : undefined;
+    const files = [...sidecars];
+    return {
+      title: meta.title.trim() || 'Untitled',
+      type: meta.type,
+      ...(t.folderPath ? { folder: t.folderPath } : {}),
+      ...(t.alsoIn.length > 0 ? { alsoIn: t.alsoIn } : {}),
+      ...(meta.createdUsec !== undefined ? { createdUsec: meta.createdUsec } : {}),
+      ...(author ? { author } : {}),
+      url: meta.link ?? `${this.siteUrl}/${meta.id}`,
+      ...(files.length > 0 ? { sidecars: files } : {}),
+    };
+  }
+
+  /** Every document this tool has exported to the target, not only this run's: notes and copies that still exist. */
+  private async indexEntries(): Promise<IndexEntry[]> {
+    const entries: IndexEntry[] = [];
+    for (const [id, st] of Object.entries(this.state.threads)) {
+      if (!st.path || !(await this.deps.sink.exists(st.path))) continue;
+      const info = st.index;
+      const folder = info ? info.folder : dirname(st.path) || undefined;
+      const sidecars: string[] = [];
+      for (const side of info?.sidecars ?? []) if (await this.deps.sink.exists(side)) sidecars.push(side);
+      entries.push({
+        id,
+        title: info?.title ?? basename(st.path).replace(/\.md$/i, ''),
+        type: info?.type ?? 'document',
+        path: st.path,
+        ...(folder ? { folder } : {}),
+        alsoIn: info?.alsoIn ?? [],
+        ...(st.updatedUsec !== undefined ? { updatedUsec: st.updatedUsec } : {}),
+        ...(info?.createdUsec !== undefined ? { createdUsec: info.createdUsec } : {}),
+        ...(info?.author ? { author: info.author } : {}),
+        url: info?.url ?? `${this.siteUrl}/${id}`,
+        embeds: Object.keys(st.embeds ?? {}).sort(),
+        sidecars,
+      });
+    }
+    return entries;
+  }
+
+  private async writeIndexFiles(markdownPath: string, jsonPath: string, now: Date): Promise<void> {
+    const entries = await this.indexEntries();
+    const info = { tool: `${TOOL_NAME} ${TOOL_VERSION}`, updated: now.toISOString(), site: this.siteUrl };
+    await this.deps.sink.writeFile(markdownPath, renderIndexMarkdown(entries, info));
+    await this.deps.sink.writeFile(jsonPath, renderIndexJson(entries, info));
   }
 
   private addWarnings(thread: ThreadMeta, warnings: Warning[]): void {
@@ -746,6 +821,7 @@ export class Exporter {
     if (await this.isUpToDate(t, prev)) {
       // Keep the report whole: an unchanged document still counts, along with the problems it had.
       if (prev) {
+        this.state.threads[meta.id] = { ...prev, index: this.indexFor(t, prev.index?.sidecars ?? []) };
         this.addWarnings(meta, prev.warnings ?? []);
         this.countEmbeds(prev.embeds ?? {});
         for (const key of prev.unresolved ?? []) this.unresolved.add(key);
@@ -759,7 +835,7 @@ export class Exporter {
 
     const warnings: Warning[] = [];
     const embeds: Record<string, number> = {};
-    const flags: Flags = { retry: false, files: new Set() };
+    const flags: Flags = { retry: false, files: new Set(), sidecars: new Set() };
     const linkLog: LinkLog = { links: {}, unresolved: new Set() };
     const rawFiles: string[] = [];
     const writeRaw = async (name: string, data: string): Promise<void> => {
@@ -809,6 +885,7 @@ export class Exporter {
       warnings: warnings.slice(0, MAX_STORED_WARNINGS),
       embeds,
       files: [...flags.files],
+      index: this.indexFor(t, flags.sidecars),
       ...(this.opts.keepRaw ? { rawFiles } : {}),
       ...(embeds.project_tracker && this.opts.timeZone ? { timeZone: this.opts.timeZone } : {}),
       ...(flags.retry ? { retry: true } : {}),
@@ -900,6 +977,7 @@ export class Exporter {
         if (!hasPdfSignature(pdf.bytes)) throw new Error('Quip did not return a PDF');
         await this.writeRecorded(t.pdfPath, pdf.bytes);
         flags.files.add(t.pdfPath);
+        flags.sidecars.add(t.pdfPath);
         pdfLink = `[Open the PDF copy](${relativeLink(t.path, t.pdfPath)})`;
       } catch (err) {
         if (err instanceof AuthError || isAbortError(err)) throw err;
@@ -923,6 +1001,7 @@ export class Exporter {
       if (!hasZipSignature(file.bytes)) throw new Error('Quip did not return a workbook');
       await this.writeRecorded(path, file.bytes);
       flags.files.add(path);
+      flags.sidecars.add(path);
       return `> Original spreadsheet with its formulas: [${escapeInline(`${title}.xlsx`)}](${relativeLink(t.path, path)})`;
     } catch (err) {
       if (err instanceof AuthError || isAbortError(err) || this.deps.signal?.aborted) throw err;

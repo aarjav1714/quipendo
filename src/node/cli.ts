@@ -87,7 +87,7 @@ function summaryLines(summary: ExportSummary): string[] {
   if (summary.unresolvedLinks.length > 0) lines.push(`${summary.unresolvedLinks.length} links point to documents outside this export and still use their Quip address.`);
   for (const f of summary.failures.slice(0, 20)) lines.push(`FAILED ${f.title} (${f.id}) at ${f.stage}: ${f.message}`);
   if (summary.failures.length > 20) lines.push(`... and ${summary.failures.length - 20} more failures; see the report.`);
-  lines.push(`Report: ${summary.reportPath}`);
+  lines.push(`Report: ${summary.reportPath}`, `Index: ${summary.indexPath}`);
   return lines;
 }
 
