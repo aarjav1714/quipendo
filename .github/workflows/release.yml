@@ -41,6 +41,7 @@ jobs:
       - run: npm run e2e
       - run: npm run e2e:firefox
       - run: npm run e2e:webkit
+      - run: npm run smoke && npm run smoke:firefox && npm run smoke:webkit
       - run: npx --yes web-ext@10.8.0 lint -s dist-firefox --warnings-as-errors
 
       - name: Package the extension for each browser, and the source

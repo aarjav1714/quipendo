@@ -254,6 +254,7 @@ npm run e2e:firefox    # the same scenarios in stock Firefox, through geckodrive
 npm run e2e:webkit     # the page itself in WebKit, Safari's engine, with the extension API stood in for (no Mac needed)
 npm run e2e:safari     # the same scenarios in the real Safari on a Mac, through AppleScript (one-time setup: docs/safari.md)
 npm run build:all      # dist/ (Chrome), dist-firefox/ and dist-safari/
+npm run smoke          # opens the package people install (minified, no test hooks) in Chromium; smoke:firefox and smoke:webkit do the same
 npm run check          # typecheck, tests, production builds for all three browsers, build verification
 npm run icons          # redraws the PNG icons, the store icon, assets/logo-512.png and the social preview from assets/logo.svg
 npm run store-assets   # remakes the Chrome Web Store tiles and screenshots in assets/store/

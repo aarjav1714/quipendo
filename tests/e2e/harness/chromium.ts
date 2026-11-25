@@ -6,7 +6,8 @@ import { TOKEN } from '../../mock/fixture';
 import type { MockQuip } from '../../mock/quipMock';
 import type { Capabilities, Download, E2EDriver, E2EPage } from './types';
 
-const EXTENSION = resolve(__dirname, '../../../dist-e2e');
+/** The test build, or with E2E_PROD=1 the package people install. */
+const EXTENSION = resolve(__dirname, '../../..', process.env.E2E_PROD === '1' ? 'dist' : 'dist-e2e');
 
 export const wipePageStorage = async (): Promise<void> => {
   await chrome.storage.local.clear();

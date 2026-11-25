@@ -9,8 +9,8 @@ import type { MockQuip } from '../../mock/quipMock';
 import { installExtensionShim } from './shim';
 import type { Capabilities, Download, E2EDriver, E2EPage } from './types';
 
-/** The Safari test build, served as ordinary web pages. */
-const EXTENSION = resolve(__dirname, '../../../dist-e2e-safari');
+/** The Safari test build (with E2E_PROD=1, the package people install), served as ordinary web pages. */
+const EXTENSION = resolve(__dirname, '../../..', process.env.E2E_PROD === '1' ? 'dist-safari' : 'dist-e2e-safari');
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',

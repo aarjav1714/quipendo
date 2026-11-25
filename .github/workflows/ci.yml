@@ -42,6 +42,8 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
+      # The minified package people install, which has no test hooks, opens and behaves.
+      - run: npm run smoke
 
   e2e-webkit:
     name: Page tests in WebKit (Safari's engine)
@@ -55,6 +57,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps webkit
       - run: npm run e2e:webkit
+      - run: npm run smoke:webkit
 
   e2e-firefox:
     name: Browser tests in Firefox
@@ -68,6 +71,7 @@ jobs:
       - run: npm ci
       # The runner image has Firefox and geckodriver; Selenium Manager finds them.
       - run: npm run e2e:firefox
+      - run: npm run smoke:firefox
 
   lint-firefox:
     name: Firefox package lint

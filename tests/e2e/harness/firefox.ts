@@ -11,7 +11,7 @@ import { EvalPage } from './evalPage';
 import type { Capabilities, Download, E2EDriver, E2EPage } from './types';
 import { wipePageStorage } from './chromium';
 
-const EXTENSION = resolve(__dirname, '../../../dist-e2e-firefox');
+const EXTENSION = resolve(__dirname, '../../..', process.env.E2E_PROD === '1' ? 'dist-firefox' : 'dist-e2e-firefox');
 const FIREFOX_APP = '/Applications/Firefox.app/Contents/MacOS/firefox';
 
 const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
