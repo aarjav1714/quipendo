@@ -82,6 +82,8 @@ const KIND_LABEL: Record<RootChoice['kind'], string> = {
 const params = new URLSearchParams(location.search);
 const E2E = __E2E__ && params.get('e2e') === '1';
 const BASE_URL = E2E ? (params.get('base') ?? DEFAULT_BASE_URL) : DEFAULT_BASE_URL;
+/** The site the extension needs access to. Permissions are per host name, not per port. */
+const SITE_HOST = new URL(BASE_URL).hostname;
 /** Only Chromium browsers can write into a folder the user picks; the others keep the export in the browser instead. */
 const CAN_PICK_FOLDER = typeof (window as { showDirectoryPicker?: unknown }).showDirectoryPicker === 'function';
 
@@ -555,7 +557,7 @@ async function lookUpPage(client: QuipClient, url: string): Promise<PageLookup> 
 
 /** Where each browser lets a person give an extension access to a site. */
 function accessHelp(): string {
-  const site = new URL(BASE_URL).host;
+  const site = SITE_HOST;
   switch (TARGET) {
     case 'safari':
       return `In Safari, open Settings → Extensions → Quipendo and set ${site} to Allow.`;
@@ -569,7 +571,7 @@ function accessHelp(): string {
 function showAccessNotice(): void {
   const missing = hostAccess === false;
   ui.accessNotice.hidden = !missing;
-  if (missing) setStatus(ui.accessNotice, `Your browser has not given Quipendo access to ${new URL(BASE_URL).host} yet. Press Connect and allow it when asked.`, 'warn');
+  if (missing) setStatus(ui.accessNotice, `Your browser has not given Quipendo access to ${SITE_HOST} yet. Press Connect and allow it when asked.`, 'warn');
 }
 
 const connectedText = (): string => {
@@ -591,7 +593,7 @@ async function connect(): Promise<void> {
       hostAccess = granted ? true : false;
       showAccessNotice();
       if (!granted) {
-        setStatus(ui.connectStatus, `Quipendo was not allowed to contact ${new URL(BASE_URL).host}, so it cannot connect. ${accessHelp()}`, 'error');
+        setStatus(ui.connectStatus, `Quipendo was not allowed to contact ${SITE_HOST}, so it cannot connect. ${accessHelp()}`, 'error');
         return;
       }
     }
@@ -626,7 +628,7 @@ async function connect(): Promise<void> {
       const noAnswer = err instanceof Error && err.message.startsWith('Network error');
       setStatus(
         ui.connectStatus,
-        isAbort(err) ? 'Connecting was cancelled.' : noAnswer ? `${describeError(err)} If your browser has not allowed Quipendo to contact ${new URL(BASE_URL).host}: ${accessHelp()}` : describeError(err),
+        isAbort(err) ? 'Connecting was cancelled.' : noAnswer ? `${describeError(err)} If your browser has not allowed Quipendo to contact ${SITE_HOST}: ${accessHelp()}` : describeError(err),
         isAbort(err) ? 'warn' : 'error',
       );
       setPhase('idle');

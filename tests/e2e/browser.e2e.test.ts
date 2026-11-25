@@ -1,7 +1,6 @@
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { chromium, type BrowserContext, type Page } from 'playwright';
+import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { ExportOptions } from '../../src/core';
 import { createSession } from '../../src/core/session';
@@ -9,69 +8,36 @@ import { DOCX_BYTES, F_ARCH, F_DESK, F_PRIV, F_SHARED, F_TRASH, ME, PNG_1X1, SIT
 import { probeHtml, startMockQuip, type MockQuip } from '../mock/quipMock';
 import { NodeFsSink, parseHtml } from '../helpers/env';
 import { readZip, type ZipEntry } from '../helpers/unzip';
+import { driverFor } from './harness';
+import type { E2EPage } from './harness/types';
 
-const EXTENSION = resolve(__dirname, '../../dist-e2e');
-
+// The same scenarios run in every browser: `E2E_BROWSER=chromium|firefox|webkit|safari` (see tests/e2e/harness).
+const driver = driverFor(process.env.E2E_BROWSER ?? 'chromium');
 let mock: MockQuip;
-let context: BrowserContext;
-let profile: string;
-let extensionId: string;
 
 beforeAll(async () => {
   mock = await startMockQuip();
-  profile = await mkdtemp(join(tmpdir(), 'quip-e2e-profile-'));
-  context = await chromium.launchPersistentContext(profile, {
-    channel: 'chromium',
-    headless: true,
-    args: [`--disable-extensions-except=${EXTENSION}`, `--load-extension=${EXTENSION}`],
-  });
-  const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
-  extensionId = new URL(worker.url()).host;
+  await driver.start(mock);
 });
 
 // A failed assertion must not leave an exporter page running: it would keep the export lock and write into the next test's folder.
-afterEach(async () => {
-  for (const page of context.pages()) if (page.url().startsWith('chrome-extension://')) await page.close().catch(() => undefined);
-  // The page keeps its settings in the profile (such as ".zip" as the output), and a test may have closed its page already.
-  // The next test must start from the defaults, so a page of its own wipes them.
-  const janitor = await context.newPage();
-  try {
-    await janitor.goto(`chrome-extension://${extensionId}/exporter.html?${new URLSearchParams({ e2e: '1', base: mock.url, target: 'e2e-janitor' })}`);
-    await janitor.waitForSelector('body[data-state="idle"]');
-    await janitor.evaluate(async () => {
-      await chrome.storage.local.clear();
-      // What a page kept of an export is wiped, too, or the next test would start from it.
-      for (const { name } of await indexedDB.databases()) {
-        if (name) await new Promise((done) => Object.assign(indexedDB.deleteDatabase(name), { onsuccess: done, onerror: done, onblocked: done }));
-      }
-    });
-  } finally {
-    await janitor.close().catch(() => undefined);
-  }
-});
+afterEach(() => driver.reset());
 
 afterAll(async () => {
-  await context?.close();
+  await driver.stop();
   await mock?.close();
-  if (profile) await rm(profile, { recursive: true, force: true });
 });
 
-async function openExporter(extra: Record<string, string> = {}): Promise<Page> {
-  const page = await context.newPage();
-  const query = new URLSearchParams({ e2e: '1', base: mock.url, token: TOKEN, ...extra });
-  await page.goto(`chrome-extension://${extensionId}/exporter.html?${query}`);
-  await page.waitForSelector('body[data-state="idle"]');
-  return page;
-}
+const openExporter = (extra: Record<string, string> = {}): Promise<E2EPage> => driver.open(extra);
 
-const state = (page: Page, value: string, timeout = 60_000) => page.waitForSelector(`body[data-state="${value}"]`, { timeout });
+const state = (page: E2EPage, value: string, timeout = 60_000) => page.waitForSelector(`body[data-state="${value}"]`, { timeout });
 
-async function connect(page: Page): Promise<void> {
+async function connect(page: E2EPage): Promise<void> {
   await page.click('#btn-connect');
   await state(page, 'connected');
 }
 
-async function readTree(page: Page): Promise<Record<string, string>> {
+async function readTree(page: E2EPage): Promise<Record<string, string>> {
   return page.evaluate(() => (window as unknown as { __e2e: { readTree(): Promise<Record<string, string>> } }).__e2e.readTree());
 }
 
@@ -134,43 +100,69 @@ function zipFiles(zip: Record<string, ZipEntry>): Record<string, string> {
 
 const withoutDirs = (tree: Record<string, string>): Record<string, string> => Object.fromEntries(Object.entries(tree).filter(([name]) => !name.endsWith('/')));
 
-async function saveDownload(page: Page, button: string): Promise<{ name: string; bytes: Uint8Array }> {
-  const [download] = await Promise.all([page.waitForEvent('download'), page.click(button)]);
-  return { name: download.suggestedFilename(), bytes: new Uint8Array(await readFile((await download.path()) as string)) };
-}
+const saveDownload = (page: E2EPage, selector: string, index = 0) => driver.saveDownload(page, selector, index);
 
-/** The checkbox of a folder or document in the tree. */
-const treeBox = (page: Page, name: string) => page.locator('#tree label').filter({ has: page.getByText(name, { exact: true }) }).locator('input');
+/** The checkbox of a folder or document in the tree, found by the name beside it. */
+const treeBox = (page: E2EPage, name: string) => {
+  const act = (action: 'checked' | 'indeterminate' | 'uncheck') =>
+    page.evaluate(
+      ({ n, what }: { n: string; what: string }) => {
+        const label = Array.from(document.querySelectorAll('#tree label')).find((l) => Array.from(l.querySelectorAll('span, small')).some((s) => s.textContent === n));
+        const box = label?.querySelector('input') as HTMLInputElement | null | undefined;
+        if (!box) throw new Error(`No entry named ${n} in the tree`);
+        if (what === 'uncheck') {
+          if (box.checked) box.click();
+          return true;
+        }
+        return what === 'checked' ? box.checked : box.indeterminate;
+      },
+      { n: name, what: action },
+    );
+  return { isChecked: () => act('checked'), isIndeterminate: () => act('indeterminate'), uncheck: () => act('uncheck') };
+};
 
 /** The documents in the tree that can be seen: not filtered out and not inside a folded folder. */
-const shownDocs = (page: Page): Promise<string[]> =>
+const shownDocs = (page: E2EPage): Promise<string[]> =>
   page.$$eval('#tree li[data-kind="doc"]', (items) => items.filter((li) => !li.closest('[hidden]')).map((li) => li.querySelector('label span')?.textContent ?? ''));
 
 /** Starts a scan and waits for it to finish, even when the page was already showing the result of an earlier one. */
-async function rescan(page: Page): Promise<void> {
+async function rescan(page: E2EPage): Promise<void> {
   const before = mock.requests.length;
   await page.click('#btn-scan');
   await expect.poll(() => mock.requests.length, { timeout: 30_000 }).toBeGreaterThan(before);
   await state(page, 'scanned');
 }
 
-describe('the extension in a real Chromium', () => {
-  it('loads with a service worker and the production-safe manifest', async () => {
-    expect(extensionId).toMatch(/^[a-p]{32}$/);
+describe(`the extension in ${driver.name}`, () => {
+  it('loads with its branding and the production-safe manifest', async () => {
+    if (driver.name === 'chromium') expect(driver.origin()).toMatch(/^chrome-extension:\/\/[a-p]{32}$/);
     const page = await openExporter();
     expect(await page.title()).toBe('Quipendo');
     await expect(page.evaluate(() => (document.querySelector('header img') as HTMLImageElement | null)?.naturalWidth ?? 0)).resolves.toBeGreaterThan(0);
     // The heading is the wordmark picture, in the version that suits the page's colour scheme.
     const wordmark = () => page.evaluate(() => ({ width: (document.querySelector('h1 img') as HTMLImageElement | null)?.naturalWidth ?? 0, src: (document.querySelector('h1 img') as HTMLImageElement | null)?.currentSrc ?? '' }));
-    await expect(page.getByRole('heading', { name: 'Quipendo' }).count()).resolves.toBe(1);
+    await expect(page.$$eval('h1', (headings) => headings.filter((h) => (h.querySelector('img') as HTMLImageElement | null)?.alt === 'Quipendo').length)).resolves.toBe(1);
     expect(await wordmark()).toMatchObject({ src: expect.stringMatching(/wordmark-on-light\.svg$/) });
     expect((await wordmark()).width).toBeGreaterThan(0);
-    await page.emulateMedia({ colorScheme: 'dark' });
-    await expect.poll(async () => (await wordmark()).src).toMatch(/wordmark-on-dark\.svg$/);
-    await expect.poll(async () => (await wordmark()).width).toBeGreaterThan(0);
-    await expect(page.evaluate(() => chrome.runtime.getManifest().icons)).resolves.toMatchObject({ '16': 'icons/icon-16.png', '128': 'icons/icon-128.png' });
-    await expect(page.textContent('#guard-status')).resolves.toContain('read-only guard: on');
-    await expect(page.textContent('#target-name')).resolves.toBe('e2e-target');
+    if (driver.setColorScheme) {
+      await driver.setColorScheme(page, 'dark');
+      await expect.poll(async () => (await wordmark()).src).toMatch(/wordmark-on-dark\.svg$/);
+      await expect.poll(async () => (await wordmark()).width).toBeGreaterThan(0);
+    }
+    // Some browsers hand the icon paths back as full addresses of the extension.
+    await expect(page.evaluate(() => chrome.runtime.getManifest().icons)).resolves.toMatchObject({ '16': expect.stringMatching(/icons\/icon-16\.png$/), '128': expect.stringMatching(/icons\/icon-128\.png$/) });
+    // Where the browser has no request-blocking of its own, the page says so instead of claiming a guard it does not have.
+    await expect(page.textContent('#guard-status')).resolves.toContain(driver.can.guard ? 'read-only guard: on' : 'read-only guard: unavailable');
+    if (driver.can.folder) {
+      await expect(page.textContent('#target-name')).resolves.toBe('e2e-target');
+      await expect(page.isChecked('#out-folder')).resolves.toBe(true);
+    } else {
+      // No folder picker in this browser: the export is kept in the browser, and the page says why the folder option is off.
+      await expect(page.isDisabled('#out-folder')).resolves.toBe(true);
+      await expect(page.isChecked('#out-store')).resolves.toBe(true);
+      await expect(page.isVisible('#folder-unavailable')).resolves.toBe(true);
+      await expect(page.isVisible('#folder-row')).resolves.toBe(false);
+    }
     await page.close();
   });
 
@@ -252,7 +244,7 @@ describe('the extension in a real Chromium', () => {
     await page.close();
   });
 
-  it('blocks every kind of write, even to an address the extension has no permission for, while reads still work', async () => {
+  it.skipIf(!driver.can.guard)('blocks every kind of write, even to an address the extension has no permission for, while reads still work', async () => {
     const page = await openExporter();
     const hook = (name: string, ...args: string[]) =>
       page.evaluate(([n, a]) => (window as unknown as { __e2e: Record<string, (...x: string[]) => Promise<string>> }).__e2e[n as string]!(...(a as string[])), [name, args] as const);
@@ -273,7 +265,7 @@ describe('the extension in a real Chromium', () => {
     await hook('tryRead', `${elsewhere}/guard/get`);
     await hook('tryMutation', `${elsewhere}/guard/post`);
     const seen = mock.requests.map((r) => `${r.method} ${r.path}`);
-    expect(seen).toContain('GET /guard/get');
+    if (driver.can.unpermittedReads) expect(seen).toContain('GET /guard/get');
     expect(seen).not.toContain('POST /guard/post');
     expect(mock.mutating()).toEqual([]);
     await page.close();
@@ -281,11 +273,10 @@ describe('the extension in a real Chromium', () => {
 
   it('never fetches the sub-resources that Quip HTML points at', async () => {
     const probe = await startMockQuip({ probe: true });
-    const plain = await context.newPage();
+    const plain = await driver.openPlain(`${probe.url}/control.html`);
     const page = await openExporter({ base: probe.url });
     try {
       // Parsing is inert in this browser...
-      await plain.goto(`${probe.url}/control.html`);
       const markup = probeHtml(probe.url);
       await plain.evaluate((html) => void new DOMParser().parseFromString(html, 'text/html'), markup);
       await plain.waitForTimeout(500);
@@ -312,7 +303,7 @@ describe('the extension in a real Chromium', () => {
       await expect(page.textContent('#run-status')).resolves.toMatch(/Done\. 9 saved/);
       await page.waitForTimeout(500);
       expect(probe.probeHits().length).toBe(control);
-      expect(probe.probeHits().filter((r) => r.referer.startsWith('chrome-extension://'))).toEqual([]); // nothing was requested on behalf of the extension page
+      expect(probe.probeHits().filter((r) => r.referer.startsWith(driver.origin()))).toEqual([]); // nothing was requested on behalf of the extension page
       expect(probe.mutating()).toEqual([]);
       const tree = await readTree(page);
       const raw = Object.entries(tree).filter(([path]) => path.endsWith('/body.html'));
@@ -363,7 +354,7 @@ describe('the extension in a real Chromium', () => {
     await page.close();
   });
 
-  it('writes to the folder chosen last, even when the folder scanned earlier has the same name', async () => {
+  it.skipIf(!driver.can.folder)('writes to the folder chosen last, even when the folder scanned earlier has the same name', async () => {
     const page = await openExporter();
     const hook = (name: string, arg: string) =>
       page.evaluate(([n, a]) => (window as unknown as { __e2e: Record<string, (x: string) => Promise<unknown>> }).__e2e[n as string]!(a as string), [name, arg] as const);
@@ -399,7 +390,7 @@ describe('the extension in a real Chromium', () => {
     await page.close();
   });
 
-  it('applies a Quip page picked mid-export only once the export has finished, without reconnecting', async () => {
+  it.skipIf(!driver.can.background)('applies a Quip page picked with the toolbar button mid-export only once the export has finished, without reconnecting', async () => {
     const slow = await startMockQuip({ delayMs: 60 });
     const page = await openExporter({ base: slow.url });
     try {
@@ -407,8 +398,7 @@ describe('the extension in a real Chromium', () => {
       await expect(page.isVisible('#page-scope')).resolves.toBe(false);
       await page.click('#btn-run');
       await state(page, 'running');
-      const worker = context.serviceWorkers()[0] as NonNullable<ReturnType<BrowserContext['serviceWorkers']>[number]>;
-      await worker.evaluate((url) => chrome.runtime.sendMessage({ type: 'quip-source-url', url }), `${SITE}/${T_PLAN}/Project-Plan`);
+      await driver.toolbarClick(page, `${SITE}/${T_PLAN}/Project-Plan`);
       await expect.poll(() => page.textContent('#log'), { timeout: 10_000 }).toContain('Another Quip page was selected');
       expect(await page.getAttribute('body', 'data-state')).toBe('running');
 
@@ -461,16 +451,65 @@ describe('the extension in a real Chromium', () => {
       await expect.poll(() => second.textContent('#run-status'), { timeout: 10_000 }).toContain('Another exporter tab is already exporting');
       expect(await second.getAttribute('body', 'data-state')).toBe('connected'); // still usable, just not running
       expect(await second.isDisabled('#btn-run')).toBe(false);
-      expect(Object.keys(await readTree(second)).filter((p) => p.endsWith('.md'))).toEqual([]);
+      // With a folder each tab has its own, so the second has written nothing; the browser's storage is one for all tabs.
+      if (driver.can.folder) expect(Object.keys(await readTree(second)).filter((p) => p.endsWith('.md'))).toEqual([]);
 
       await state(first, 'done', 120_000);
       await second.click('#btn-run'); // the lock is free again
       await state(second, 'done', 120_000);
-      await expect(second.textContent('#run-status')).resolves.toMatch(/Done\. 9 saved/);
+      await expect(second.textContent('#run-status')).resolves.toMatch(driver.can.folder ? /Done\. 9 saved/ : /Done\. \d saved, \d unchanged of 9 documents/);
     } finally {
       await Promise.all([first.close(), second.close()]);
       await slow.close();
     }
+  });
+
+  it.skipIf(!driver.can.background)('hands the Quip page to an exporter page that is already open, instead of opening another', async () => {
+    const page = await openExporter();
+    expect(await driver.exporterPages()).toBe(1);
+    await driver.toolbarClick(page, `${SITE}/${T_PLAN}/Project-Plan`);
+    // The page keeps the address until it has connected, then offers that page as the scope.
+    await connect(page);
+    await expect(page.textContent('#page-label')).resolves.toBe('Document: Project Plan');
+    await expect(page.isChecked('#scope-page')).resolves.toBe(true);
+    expect(await driver.exporterPages()).toBe(1);
+    await page.close();
+  });
+
+  it.skipIf(!driver.can.background)('opens an exporter page that offers the Quip page as the scope when none is open', async () => {
+    const quip = `${SITE}/${T_PLAN}/Project-Plan?x=1&y=2`;
+    const first = await openExporter();
+    // The first page is open, but pretends not to be, to reach the part that opens a new one.
+    const opened = await driver.toolbarClick(first, quip, { nobodyListens: true });
+    expect(opened).toBeDefined();
+    await expect(Promise.resolve((opened as E2EPage).url())).resolves.toBe(`${driver.origin()}/exporter.html?from=${encodeURIComponent(quip)}`);
+    await (opened as E2EPage).waitForSelector('body[data-state="idle"]');
+    expect(await driver.exporterPages()).toBe(2);
+    await (opened as E2EPage).close();
+    await first.close();
+  });
+
+  it.skipIf(!driver.can.revocableAccess)('asks the browser for access to Quip when it was withdrawn, and says what to do when that is refused', async () => {
+    const origin = `${new URL(mock.url).protocol}//${new URL(mock.url).hostname}/*`;
+    const before = await openExporter();
+    await expect(before.isVisible('#access-notice')).resolves.toBe(false);
+    await expect(before.evaluate((pattern: string) => chrome.permissions.remove({ origins: [pattern] }), origin)).resolves.toBe(true);
+    await before.close();
+
+    const page = await openExporter();
+    await expect(page.isVisible('#access-notice')).resolves.toBe(true);
+    await expect(page.textContent('#access-notice')).resolves.toContain('has not given Quipendo access to 127.0.0.1 yet');
+    // A click made by a script is not a person's click, so the browser refuses to ask: the page says what to do by hand.
+    await page.evaluate(() => (document.getElementById('btn-connect') as HTMLButtonElement).click());
+    await expect.poll(() => page.textContent('#connect-status')).toContain('was not allowed to contact 127.0.0.1, so it cannot connect.');
+    await expect(page.textContent('#connect-status')).resolves.toMatch(/about:addons|Settings → Extensions/);
+    await expect(page.getAttribute('#connect-status', 'data-tone')).resolves.toBe('error');
+
+    // A real click gets the access, and the connection goes ahead.
+    await connect(page);
+    await expect(page.isVisible('#access-notice')).resolves.toBe(false);
+    await expect(page.textContent('#connect-status')).resolves.toContain('Connected as Jane Doe');
+    await page.close();
   });
 
   it('says why the page you came from cannot be offered, instead of silently showing all folders', async () => {
@@ -559,8 +598,8 @@ describe('the extension in a real Chromium', () => {
     await page.fill('#tree-filter', '');
     expect(await treeBox(page, 'Budget').isChecked()).toBe(false);
     // The folders above it show that only part of what is in them is ticked.
-    expect(await treeBox(page, 'Projects').evaluate((box: HTMLInputElement) => box.indeterminate)).toBe(true);
-    expect(await treeBox(page, 'Private').evaluate((box: HTMLInputElement) => box.indeterminate)).toBe(true);
+    expect(await treeBox(page, 'Projects').isIndeterminate()).toBe(true);
+    expect(await treeBox(page, 'Private').isIndeterminate()).toBe(true);
 
     // A folder takes everything in it along.
     await treeBox(page, 'Team Shared').uncheck();
@@ -707,7 +746,7 @@ describe('the extension in a real Chromium', () => {
     await expect(page.textContent('#run-status')).resolves.toMatch(/Done\. 9 saved, 0 unchanged of 9 documents\. The report is _Quip export report\.md in the copy kept in this browser\./);
     await expect(page.textContent('#store-info')).resolves.toMatch(/^[\d,]+ files, [\d.]+ [KM]B, kept in this browser\.$/);
     // The folder the page had been given was not touched.
-    await expect(page.evaluate(() => (window as unknown as { __e2e: { readTreeAt(p: string): Promise<object> } }).__e2e.readTreeAt('e2e-target'))).resolves.toEqual({});
+    if (driver.can.folder) await expect(page.evaluate(() => (window as unknown as { __e2e: { readTreeAt(p: string): Promise<object> } }).__e2e.readTreeAt('e2e-target'))).resolves.toEqual({});
     // The test hook sees the store as it would a folder, and it matches what the Node pipeline writes.
     expect(comparable(await readTree(page))).toEqual(await nodeReference());
 
@@ -731,13 +770,15 @@ describe('the extension in a real Chromium', () => {
     await state(page, 'done');
     await expect(page.textContent('#run-status')).resolves.toMatch(/Done\. 0 saved, 9 unchanged of 9 documents/);
 
-    // Going back to a folder forgets the scan made for the store and hides the store's panel; the stored copy stays.
-    await page.check('#out-folder');
-    await expect(page.isVisible('#store-panel')).resolves.toBe(false);
-    await expect(page.isVisible('#folder-row')).resolves.toBe(true);
-    await expect(page.isVisible('#tree-panel')).resolves.toBe(false);
-    await page.check('#out-store');
-    await expect.poll(() => page.textContent('#store-info')).toMatch(/^[\d,]+ files, /);
+    if (driver.can.folder) {
+      // Going back to a folder forgets the scan made for the store and hides the store's panel; the stored copy stays.
+      await page.check('#out-folder');
+      await expect(page.isVisible('#store-panel')).resolves.toBe(false);
+      await expect(page.isVisible('#folder-row')).resolves.toBe(true);
+      await expect(page.isVisible('#tree-panel')).resolves.toBe(false);
+      await page.check('#out-store');
+      await expect.poll(() => page.textContent('#store-info')).toMatch(/^[\d,]+ files, /);
+    }
     await page.close();
   });
 
@@ -799,9 +840,9 @@ describe('the extension in a real Chromium', () => {
 
     const files: Record<string, string> = {};
     for (let i = 0; i < buttons.length; i += 1) {
-      const [download] = await Promise.all([page.waitForEvent('download'), page.locator('.zip-part').nth(i).click()]);
-      expect(download.suggestedFilename()).toMatch(new RegExp(`^quipendo-export-\\d{4}-\\d{2}-\\d{2}-part-${i + 1}-of-${buttons.length}\\.zip$`));
-      const zip = readZip(new Uint8Array(await readFile((await download.path()) as string)));
+      const download = await saveDownload(page, '.zip-part', i);
+      expect(download.name).toMatch(new RegExp(`^quipendo-export-\\d{4}-\\d{2}-\\d{2}-part-${i + 1}-of-${buttons.length}\\.zip$`));
+      const zip = readZip(download.bytes);
       expect(Object.keys(zip).length).toBeLessThanOrEqual(20);
       for (const [name, text] of Object.entries(zipFiles(zip))) {
         expect(files[name], `${name} is in two parts`).toBeUndefined();

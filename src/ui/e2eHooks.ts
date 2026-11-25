@@ -20,7 +20,34 @@ export interface TestHooksSource {
   useTarget(handle: FileSystemDirectoryHandle): Promise<void>;
 }
 
+/** What the page handed to the browser to save as a download, kept so a test can look at it in browsers it cannot watch downloading. */
+function recordDownloads(): Array<{ name: string; blob: Blob }> {
+  const recorded: Array<{ name: string; blob: Blob }> = [];
+  const blobs = new Map<string, Blob>();
+  const create = URL.createObjectURL.bind(URL);
+  URL.createObjectURL = (object: Blob | MediaSource): string => {
+    const url = create(object);
+    if (object instanceof Blob) blobs.set(url, object);
+    return url;
+  };
+  const click = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement): void {
+    const name = this.getAttribute('download');
+    const blob = blobs.get(this.href);
+    if (name !== null && blob) recorded.push({ name, blob });
+    click.call(this);
+  };
+  return recorded;
+}
+
+const toBase64 = (bytes: Uint8Array): string => {
+  let text = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(text);
+};
+
 export function installTestHooks({ target: getTarget, store: getStore, useTarget }: TestHooksSource): void {
+  const downloads = recordDownloads();
   const walk = async (dir: FileSystemDirectoryHandle, prefix: string, out: Record<string, string>): Promise<void> => {
     for await (const [name, handle] of (dir as unknown as { entries(): AsyncIterable<[string, FileSystemHandle]> }).entries()) {
       const path = `${prefix}${name}`;
@@ -70,6 +97,8 @@ export function installTestHooks({ target: getTarget, store: getStore, useTarget
     },
     /** Behaves as if the user had picked another folder; the name can repeat that of the current one. */
     switchTarget: async (path: string) => useTarget(await nested(path)),
+    /** The files the page offered for download since the last call: name and content (base64). */
+    takeDownloads: async () => Promise.all(downloads.splice(0).map(async ({ name, blob }) => ({ name, base64: toBase64(new Uint8Array(await blob.arrayBuffer())) }))),
     tryMutation: (url: string, method = 'POST') => outcome(fetch(url, { method, body: '{}' })),
     tryRead: (url: string) => outcome(fetch(url, { method: 'GET' })),
   };
