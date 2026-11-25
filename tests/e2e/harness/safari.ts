@@ -225,6 +225,8 @@ class SafariPage extends EvalPage {
   }
 
   async close(): Promise<void> {
-    await osascript(withTab('close t\nreturn "done"'), '', this.address, this.mode());
+    // Safari leaves the selected tab open when a script closes it, so another tab is selected first.
+    const select = ['if (count of tabs of w) > 1 then', 'set pick to 1', 'if (index of t) is 1 then set pick to 2', 'set current tab of w to tab pick of w', 'end if'];
+    await osascript(withTab([...select, 'close t', 'return "done"'].join('\n')), '', this.address, this.mode());
   }
 }
