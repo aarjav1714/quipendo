@@ -2,7 +2,7 @@ import { htmlToMarkdown, type HtmlParser } from './convert';
 import { digest, digestText } from './digest';
 import { frontMatter, frontMatterHasId, relativeLink, usecToIso } from './links';
 import { escapeBlockStart, escapeInline } from './markdownUtils';
-import { PathAllocator } from './naming';
+import { PathAllocator, dirname } from './naming';
 import { AuthError, QuipHttpError } from './quipClient';
 import type { OwnedThread, QuipApi, QuipMessage } from './quipTypes';
 import { attachmentExtension, rewriteSentinels, stripExtension } from './rewrite';
@@ -23,6 +23,8 @@ const RAW_DIR = '.quip-raw';
 const FALLBACK_SITE = 'https://quip.com';
 const QUIP_URL = /https?:\/\/(?:[\w-]+\.)*quip\.com\/([A-Za-z0-9]{11,12})(?:[/?#][^\s<>)]*)?/g;
 const MAX_STORED_WARNINGS = 20;
+/** Stands in for the path of a folder that is left out, so everything below it is left out too. */
+const EXCLUDED_FOLDER = '\u0000excluded';
 
 export interface ExportOptions {
   /** Folders to walk recursively, in priority order: a document in several folders is written under the first root that contains it. */
@@ -46,6 +48,13 @@ export interface ExportOptions {
   /** Skip documents whose `updated_usec`, options and link targets match the previous export. */
   skipUnchanged: boolean;
   maxDocs: number | undefined;
+  /** Only export documents last changed at or after this time (microseconds since the epoch). Documents with no known change time are kept. */
+  sinceUsec: number | undefined;
+  /**
+   * Folders and documents to leave out, by id. A folder takes everything only it contains with it; a document that is
+   * also in another exported folder is still exported there, because Quip folders work like tags.
+   */
+  excludeIds: string[];
   siteUrl: string | undefined;
   /** IANA time zone used to read date-only values in trackers. */
   timeZone: string | undefined;
@@ -64,6 +73,8 @@ export const DEFAULT_OPTIONS: ExportOptions = {
   saveXlsx: true,
   skipUnchanged: true,
   maxDocs: undefined,
+  sinceUsec: undefined,
+  excludeIds: [],
   siteUrl: undefined,
   timeZone: undefined,
   attachmentsDir: '_attachments',
@@ -123,6 +134,8 @@ export interface Plan {
   unreadableUnselected: Array<{ id: string; status: number }>;
   /** Documents whose folder or title changed in Quip since the last export; the old copy is left in place. */
   relocated: Relocation[];
+  /** Documents left out because of the exclusions or the "changed since" date. */
+  leftOut: { excluded: number; older: number };
   estimatedRequests: number;
 }
 
@@ -161,6 +174,7 @@ export interface ExportSummary {
   skippedChats: number;
   othersUnfiled: number;
   relocated: Relocation[];
+  leftOut: Plan['leftOut'] & { since?: string };
   rateLimitPauses: number;
   reportPath: string;
 }
@@ -418,9 +432,18 @@ export class Exporter {
     const client = this.deps.client;
     this.emit({ type: 'phase', phase: 'scan', message: 'Reading the folder structure…' });
 
+    const excluded = new Set(this.opts.excludeIds);
+    // Everything found in the walked folders, left out or not: a document that sits in a folder is never "unfiled".
+    const seenAnywhere = new Set<string>();
+    const leftOutIds = new Set<string>();
     const locations = new Map<string, string[]>();
     const order: string[] = [];
     const see = (id: string, folderPath: string): void => {
+      seenAnywhere.add(id);
+      if (excluded.has(id)) {
+        leftOutIds.add(id);
+        return;
+      }
       const known = locations.get(id);
       if (!known) {
         locations.set(id, [folderPath]);
@@ -437,12 +460,21 @@ export class Exporter {
         rootId,
         visited,
         (folder, parentPath) => {
+          if (parentPath === EXCLUDED_FOLDER || excluded.has(folder.id)) {
+            for (const threadId of folder.threadIds) {
+              seenAnywhere.add(threadId);
+              leftOutIds.add(threadId);
+            }
+            return EXCLUDED_FOLDER;
+          }
           const path = this.alloc.allocate(`folder:${folder.id}`, parentPath, folder.title || 'Untitled folder');
           folders.push({ id: folder.id, title: folder.title, path, docCount: 0 });
           for (const threadId of folder.threadIds) see(threadId, path);
           return path;
         },
-        (id, status) => unreadableFolders.push({ id, status }),
+        (id, status) => {
+          if (!excluded.has(id)) unreadableFolders.push({ id, status });
+        },
       );
       this.log('info', `Scanned ${folders.length} folders, ${order.length} documents so far…`);
     }
@@ -459,7 +491,7 @@ export class Exporter {
         this.log('warn', 'Unfiled documents were skipped because the signed-in user is not known.');
       } else {
         this.log('info', 'Looking for documents that are in no folder…');
-        const known = new Set(locations.keys());
+        const known = new Set(seenAnywhere);
         for (const rootId of this.opts.allRootIds) {
           if (visited.has(rootId)) continue;
           await this.walk(
@@ -486,6 +518,9 @@ export class Exporter {
     const unreadableThreads: Plan['unreadableThreads'] = [];
     let unfiled = 0;
     let othersUnfiled = 0;
+    let older = 0;
+    const since = this.opts.sinceUsec;
+    const isOlder = (meta: ThreadMeta): boolean => since !== undefined && meta.updatedUsec !== undefined && meta.updatedUsec < since;
     for (const candidate of candidates) {
       const result = metas.get(candidate.id);
       if (!result || !result.ok) {
@@ -493,6 +528,10 @@ export class Exporter {
         continue;
       }
       if (result.value.authorId === this.opts.ownerId) {
+        if (isOlder(result.value)) {
+          older += 1;
+          continue;
+        }
         see(candidate.id, this.unfiledRoot);
         unfiled += 1;
       } else othersUnfiled += 1;
@@ -508,6 +547,10 @@ export class Exporter {
       }
       if (result.value.type === 'chat') {
         skippedChats += 1;
+        continue;
+      }
+      if (isOlder(result.value)) {
+        older += 1;
         continue;
       }
       threads.push({ meta: result.value, raw: result.raw, folderPath: where[0] ?? '', alsoIn: where.slice(1), path: '' });
@@ -531,8 +574,16 @@ export class Exporter {
 
     this.buildDocIndex(limited);
     const perDoc = 1 + (this.opts.includeComments ? 1 : 0);
+    let plannedFolders = folders;
+    if (since !== undefined) {
+      // A first export of only recent documents should not recreate every old, now empty, folder.
+      const needed = new Set<string>();
+      for (const t of limited) for (let p = t.folderPath; p; p = dirname(p)) needed.add(p);
+      plannedFolders = folders.filter((f) => needed.has(f.path));
+    }
+    const leftOut = { excluded: [...leftOutIds].filter((id) => !locations.has(id)).length, older };
     this.plan = {
-      folders,
+      folders: plannedFolders,
       threads: limited,
       unreadableFolders,
       unreadableThreads,
@@ -541,9 +592,10 @@ export class Exporter {
       othersUnfiled,
       unreadableUnselected,
       relocated,
+      leftOut,
       estimatedRequests: limited.length * perDoc + Math.ceil(folders.length / 20) + Math.ceil((order.length + candidates.length) / 100) + 5,
     };
-    this.emit({ type: 'phase', phase: 'scan', message: `Found ${limited.length} documents in ${folders.length} folders.` });
+    this.emit({ type: 'phase', phase: 'scan', message: `Found ${limited.length} documents in ${plannedFolders.length} folders.` });
     return this.plan;
   }
 
@@ -562,6 +614,16 @@ export class Exporter {
 
   private findDoc(key: string): PlannedThread | undefined {
     return this.docIndex.get(key) ?? (key.length === 12 ? this.docIndex.get(key.slice(0, 11)) : undefined);
+  }
+
+  /** Where an earlier export put a document's note: the way to link to documents that are not part of this run. */
+  private earlierPath(key: string): string | undefined {
+    return this.state.threads[key.length === 12 ? key.slice(0, 11) : key]?.path;
+  }
+
+  /** The note a link should point to: this run's, or, for a document left out of this run, the one an earlier export wrote. */
+  private notePath(key: string): string | undefined {
+    return this.findDoc(key)?.path ?? this.earlierPath(key);
   }
 
   // ---- export ----------------------------------------------------------
@@ -626,6 +688,7 @@ export class Exporter {
       skippedChats: plan.skippedChats,
       othersUnfiled: plan.othersUnfiled,
       relocated: plan.relocated,
+      leftOut: { ...plan.leftOut, ...(this.opts.sinceUsec !== undefined ? { since: usecToIso(this.opts.sinceUsec) as string } : {}) },
       rateLimitPauses: this.pauses,
       reportPath,
     };
@@ -667,8 +730,8 @@ export class Exporter {
     if (prev.fingerprint !== this.fingerprint() || prev.path !== t.path) return false;
     if (this.opts.keepRaw && !prev.rawFiles) return false;
     if (prev.timeZone !== undefined && prev.timeZone !== this.opts.timeZone) return false;
-    for (const [key, target] of Object.entries(prev.links ?? {})) if (this.findDoc(key)?.path !== target) return false;
-    for (const key of prev.unresolved ?? []) if (this.findDoc(key)) return false;
+    for (const [key, target] of Object.entries(prev.links ?? {})) if (this.notePath(key) !== target) return false;
+    for (const key of prev.unresolved ?? []) if (this.notePath(key)) return false;
     for (const file of prev.files ?? []) if (!(await this.deps.sink.exists(file))) return false;
     if (this.opts.keepRaw) for (const file of prev.rawFiles ?? []) if (!(await this.deps.sink.exists(file))) return false;
     // Still this document's note: the file may have been replaced since the scan.
@@ -792,17 +855,27 @@ export class Exporter {
 
     for (const ref of result.blobs) await this.ensureBlob(ref, warnings, flags);
     await this.identifyPeople(result.docLinks);
+    // A document left out of this run (older than the chosen date, excluded, or past the limit) keeps the link an
+    // earlier export gave it, as long as that note is still there.
+    const earlier = new Map<string, string>();
+    for (const key of result.docLinks) {
+      const path = this.findDoc(key) ? undefined : this.earlierPath(key);
+      if (path && (await this.deps.sink.exists(path))) {
+        earlier.set(key, path);
+        flags.files.add(path);
+      }
+    }
     const rewritten = rewriteSentinels(result.markdown, {
       from: t.path,
       blobPath: (key) => this.blobPaths.get(key),
-      docPath: (key) => this.findDoc(key)?.path,
+      docPath: (key) => this.findDoc(key)?.path ?? earlier.get(key),
       isUser: (id) => this.users.has(id),
       originalUrl: (key) => result.docUrls[key],
       siteUrl: this.siteUrl,
     });
     for (const key of result.docLinks) {
-      const target = this.findDoc(key);
-      if (target) linkLog.links[key] = target.path;
+      const target = this.findDoc(key)?.path ?? earlier.get(key);
+      if (target) linkLog.links[key] = target;
     }
     for (const key of rewritten.unresolvedDocs) linkLog.unresolved.add(key);
     if (rewritten.unresolvedDocs.length > 0) warnings.push({ code: 'link-outside-export', detail: rewritten.unresolvedDocs.join(', ') });
@@ -811,7 +884,7 @@ export class Exporter {
 
   /** Person @mentions use document-style URLs, so ids that match no exported document are checked against the users API once. */
   private async identifyPeople(linkIds: string[]): Promise<void> {
-    const unknown = linkIds.filter((id) => !this.findDoc(id) && !this.users.has(id) && !this.notUsers.has(id));
+    const unknown = linkIds.filter((id) => !this.findDoc(id) && !this.earlierPath(id) && !this.users.has(id) && !this.notUsers.has(id));
     if (unknown.length === 0) return;
     const found = await this.deps.client.getUsers(unknown);
     for (const [id, name] of found) this.users.set(id, name);
@@ -1003,6 +1076,11 @@ export function renderReport(summary: ExportSummary, plan: Plan): string {
     `- Attachments: ${summary.attachments.saved} saved, ${summary.attachments.reused} reused, ${summary.attachments.missing} unavailable`,
     `- Comments exported: ${summary.comments}`,
   );
+  const out = summary.leftOut;
+  if (out.excluded + out.older > 0) {
+    const parts = [out.excluded > 0 ? `${out.excluded} excluded` : '', out.older > 0 ? `${out.older} last changed before ${(out.since ?? '').slice(0, 10) || 'the chosen date'}` : ''].filter(Boolean);
+    lines.push(`- Left out on request: ${parts.join(', ')}`);
+  }
   if (summary.rateLimitPauses > 0) lines.push(`- Quip's rate limit paused the export ${summary.rateLimitPauses} times`);
 
   const embeds = Object.entries(summary.embeds).sort(([a], [b]) => a.localeCompare(b));

@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { ExportEvent, ExportOptions, ExportSummary, Plan } from '../core/exporter';
 import { AuthError, QuipClient } from '../core/quipClient';
-import { parseQuipUrl, rootChoices } from '../core/roots';
+import { parseQuipUrl, quipIdFrom, rootChoices } from '../core/roots';
 import { createSession, type SessionConfig } from '../core/session';
 import { parseHtmlWithJsdom } from './jsdomParser';
 import { NodeFsSink } from './nodeSink';
@@ -25,6 +25,9 @@ Options:
   -o, --out <folder>   Where to write the Markdown (created if missing). Required.
       --from <url>     Export only this Quip document or folder (everything inside it) instead of the account.
       --limit <n>      Export at most n documents (good for a trial run).
+      --since <date>   Export only documents last changed on or after this date, such as 2024-01-31.
+      --exclude <url>  Leave out a folder or a document, given as its Quip address or id. Repeat for several.
+                       A document that is also in another exported folder is still exported there.
       --scan-only      Read the folder structure and report what would be exported, without writing anything.
       --force          Export every document again, even if it is unchanged since the last run.
       --no-comments    Leave out comments and conversation.
@@ -58,8 +61,10 @@ const describe = (err: unknown): string =>
 
 const codeFor = (err: unknown): number => (err instanceof AuthError ? 3 : isAbort(err) ? 130 : 1);
 
-function planLines(plan: Plan): string[] {
+function planLines(plan: Plan, since?: string): string[] {
   const lines = [`${plan.threads.length} documents in ${plan.folders.length} folders would be exported.`];
+  if (plan.leftOut.excluded > 0) lines.push(`${plan.leftOut.excluded} documents are left out by --exclude.`);
+  if (plan.leftOut.older > 0) lines.push(`${plan.leftOut.older} documents last changed before ${since ?? 'the --since date'} are left out.`);
   if (plan.unfiled > 0) lines.push(`${plan.unfiled} documents you wrote are in no folder (they go under "_Unfiled").`);
   if (plan.othersUnfiled > 0) lines.push(`${plan.othersUnfiled} documents by other people are in none of your folders and are not exported.`);
   if (plan.relocated.length > 0) lines.push(`${plan.relocated.length} documents get a new file name or folder; the old copy stays.`);
@@ -97,6 +102,8 @@ export async function main(argv: string[], env: Record<string, string | undefine
         out: { type: 'string', short: 'o' },
         from: { type: 'string' },
         limit: { type: 'string' },
+        since: { type: 'string' },
+        exclude: { type: 'string', multiple: true },
         'scan-only': { type: 'boolean' },
         force: { type: 'boolean' },
         'no-comments': { type: 'boolean' },
@@ -131,6 +138,24 @@ export async function main(argv: string[], env: Record<string, string | undefine
       io.err('--limit needs a whole number of 1 or more.');
       return 2;
     }
+  }
+  let sinceUsec: number | undefined;
+  if (values.since !== undefined) {
+    const ms = Date.parse(values.since);
+    if (!Number.isFinite(ms)) {
+      io.err('--since needs a date such as 2024-01-31.');
+      return 2;
+    }
+    sinceUsec = ms * 1000;
+  }
+  const excludeIds: string[] = [];
+  for (const raw of values.exclude ?? []) {
+    const id = quipIdFrom(raw);
+    if (!id) {
+      io.err(`"${raw}" is not the address or id of a Quip document or folder.`);
+      return 2;
+    }
+    excludeIds.push(id);
   }
   const token = (values['token-stdin'] ? await io.readStdin() : (env.QUIP_TOKEN ?? '')).trim();
   if (!token) {
@@ -182,6 +207,8 @@ export async function main(argv: string[], env: Record<string, string | undefine
       saveXlsx: !values['no-xlsx'],
       skipUnchanged: !values.force,
       ...(limit !== undefined ? { maxDocs: limit } : {}),
+      ...(sinceUsec !== undefined ? { sinceUsec } : {}),
+      ...(excludeIds.length > 0 ? { excludeIds } : {}),
       ...(user.siteUrl ? { siteUrl: user.siteUrl } : {}),
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     };
@@ -219,7 +246,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
     });
 
     if (values['scan-only']) {
-      for (const line of planLines(await exporter.scan())) io.out(line);
+      for (const line of planLines(await exporter.scan(), values.since)) io.out(line);
       io.out('Nothing was written.');
       return 0;
     }

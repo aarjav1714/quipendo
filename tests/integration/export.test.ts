@@ -22,8 +22,12 @@ import {
   PNG_1X1,
   SITE,
   T_LOOSE,
+  T_NOTES_A,
+  T_NOTES_B,
   T_PLAN,
   T_READING,
+  T_SHEET,
+  T_SLIDES,
   TOKEN,
   XLSX_BYTES,
 } from '../mock/fixture';
@@ -322,6 +326,80 @@ describe('scope and options', () => {
     const summary = await makeSession({ ownerId: undefined }, { onEvent: (e) => events.push(e) }).exporter.run();
     expect(summary.docs.planned).toBe(8);
     expect(events.some((e) => e.type === 'log' && e.level === 'warn' && /unfiled/i.test(e.message))).toBe(true);
+  });
+});
+
+describe('choosing what to export', () => {
+  const usec = (iso: string): number => Date.parse(iso) * 1000;
+
+  it('leaves out a folder and what only it contains, without mistaking its documents for unfiled ones', async () => {
+    const { exporter } = makeSession({ excludeIds: [F_PROJ] });
+    const plan = await exporter.scan();
+    expect(plan.leftOut).toEqual({ excluded: 3, older: 0 });
+    const summary = await exporter.run();
+    const tree = await visible();
+    expect(tree.some((p) => p.startsWith('Private/Projects'))).toBe(false);
+    expect(tree).not.toContain('_Unfiled/Project Plan.md'); // it is in a folder, only not an exported one
+    expect(summary.docs.planned).toBe(6);
+    expect(summary.leftOut).toEqual({ excluded: 3, older: 0 });
+    expect(await read('_Quip export report.md')).toContain('- Left out on request: 3 excluded');
+  });
+
+  it('leaves out single documents', async () => {
+    await runAll({ excludeIds: [T_NOTES_A] });
+    expect(await notes()).not.toContain('Private/Notes.md');
+    expect(await notes()).toContain('Private/notes.md'); // no longer needs a number to tell it from "Notes"
+  });
+
+  it('treats folders like tags: a document that is also in an exported folder is still exported there', async () => {
+    await runAll({ excludeIds: [F_PRIV] });
+    const tree = await visible();
+    expect(tree).toContain('Desktop/Reading Log.md');
+    expect(tree.some((p) => p.startsWith('Private'))).toBe(false);
+  });
+
+  it('exports only documents changed since a date, and does not recreate folders that would stay empty', async () => {
+    const old = await setup();
+    for (const id of [T_PLAN, T_SHEET, T_SLIDES]) (old.mock.fixture.threads[id] as { updated: number }).updated = usec('2019-05-01T00:00:00Z');
+    (old.mock.fixture.threads[T_LOOSE] as { updated: number }).updated = usec('2019-05-01T00:00:00Z'); // unfiled, and old
+    const summary = await runAll({ sinceUsec: usec('2020-01-01T00:00:00Z') }, old);
+    expect(summary.leftOut).toEqual({ excluded: 0, older: 4, since: '2020-01-01T00:00:00.000Z' });
+    const tree = await visible(old);
+    expect(tree.some((p) => p.startsWith('Private/Projects'))).toBe(false);
+    expect(tree).not.toContain('_Unfiled/Loose note.md');
+    expect(tree).toContain('Private/Reading Log.md');
+    expect(await read('_Quip export report.md', old)).toContain('- Left out on request: 4 last changed before 2020-01-01');
+  });
+
+  it('applies the date before the limit, so the limit counts documents that are wanted', async () => {
+    const old = await setup();
+    for (const id of [T_READING, T_NOTES_A]) (old.mock.fixture.threads[id] as { updated: number }).updated = usec('2019-05-01T00:00:00Z');
+    const summary = await runAll({ sinceUsec: usec('2020-01-01T00:00:00Z'), maxDocs: 2 }, old);
+    expect(summary.docs.planned).toBe(2);
+    // The first two documents in walking order are old, so the limit is spent on the next two that qualify.
+    expect(await notes(old)).toEqual(['Private/Q3-Q4 - plan - final.md', 'Private/notes.md']);
+  });
+
+  it('keeps the links an earlier export gave a note to documents that a later partial run leaves out', async () => {
+    await runAll();
+    expect(await read('Private/Projects/Project Plan.md')).toContain('[Reading Log](../Reading%20Log.md)');
+    // Only the plan changes in Quip; the later run covers just documents changed since then.
+    const planned = ctx.mock.fixture.threads[T_PLAN] as { updated: number };
+    planned.updated += 5_000_000;
+    const second = await runAll({ sinceUsec: planned.updated });
+    expect(second.docs).toMatchObject({ planned: 1, exported: 1 });
+    expect(await read('Private/Projects/Project Plan.md')).toContain('[Reading Log](../Reading%20Log.md)');
+    expect(second.unresolvedLinks).not.toContain('tREADINGth1v');
+  });
+
+  it('falls back to the Quip address when the earlier note is gone, and notices when it comes back', async () => {
+    await runAll();
+    await rm(join(ctx.dir, 'Private/Reading Log.md'));
+    const planned = ctx.mock.fixture.threads[T_PLAN] as { updated: number };
+    planned.updated += 5_000_000;
+    const second = await runAll({ sinceUsec: planned.updated });
+    expect(await read('Private/Projects/Project Plan.md')).toContain('(https://acme.quip.com/tREADINGth1v/Reading-Log');
+    expect(second.unresolvedLinks).toContain('tREADINGth1v');
   });
 });
 

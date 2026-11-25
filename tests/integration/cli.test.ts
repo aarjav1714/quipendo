@@ -89,6 +89,42 @@ describe('exporting an account', () => {
   });
 });
 
+describe('choosing what to export', () => {
+  it('--exclude leaves out a folder given by its address or its id, and says so', async () => {
+    const byUrl = await run(['--out', dir, '--exclude', `${SITE}/${F_PROJ}/Projects`, '--scan-only']);
+    expect(byUrl.code).toBe(0);
+    expect(byUrl.out).toContain('6 documents in 4 folders would be exported.');
+    expect(byUrl.out).toContain('3 documents are left out by --exclude.');
+    const byId = await run(['--out', dir, '--exclude', F_PROJ]);
+    expect(byId.all).toMatch(/Done\. 6 saved/);
+    expect((await visible()).some((p) => p.startsWith('Private/Projects'))).toBe(false);
+  });
+
+  it('--exclude can be repeated', async () => {
+    const r = await run(['--out', dir, '--exclude', F_PROJ, '--exclude', T_READING_SECRET, '--scan-only']);
+    expect(r.out).toContain('5 documents in 4 folders would be exported.');
+  });
+
+  it('--since leaves out documents last changed earlier', async () => {
+    const r = await run(['--out', dir, '--since', '2030-01-01', '--scan-only']);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('9 documents last changed before 2030-01-01 are left out.');
+    expect(r.out.join('\n')).toContain('0 documents in 0 folders would be exported.');
+    const none = await run(['--out', dir, '--since', '2020-01-01']);
+    expect(none.all).toMatch(/Done\. 9 saved/);
+  });
+
+  it('rejects a date or an address it cannot read, before calling Quip', async () => {
+    const date = await run(['--out', dir, '--since', 'last week']);
+    expect(date.code).toBe(2);
+    expect(date.err.join(' ')).toContain('--since needs a date such as 2024-01-31');
+    const address = await run(['--out', dir, '--exclude', 'https://example.com/nothing']);
+    expect(address.code).toBe(2);
+    expect(address.err.join(' ')).toContain('is not the address or id of a Quip document or folder');
+    expect(mock.requests).toHaveLength(0);
+  });
+});
+
 describe('exporting one page', () => {
   it('--from a document exports just that document, and not the unfiled ones', async () => {
     const r = await run(['--out', dir, '--from', `${SITE}/${T_READING_SECRET}/Reading-Log`]);

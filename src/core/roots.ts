@@ -49,3 +49,13 @@ export function parseQuipUrl(raw: string): QuipLink | undefined {
   if (!id || !/^[A-Za-z0-9]{11,12}$/.test(id) || !/[A-Z]/.test(id)) return undefined;
   return { host: url.hostname, id };
 }
+
+/**
+ * The 11-character id of a Quip document or folder, from a Quip address, an id or a secret path (an id plus one
+ * character). Used for choices a person types, such as folders to leave out.
+ */
+export function quipIdFrom(raw: string): string | undefined {
+  const text = raw.trim();
+  const id = /^https?:\/\//i.test(text) ? parseQuipUrl(text)?.id : /^[A-Za-z0-9]{11,12}$/.test(text) && /[A-Z]/.test(text) ? text : undefined;
+  return id?.slice(0, 11);
+}

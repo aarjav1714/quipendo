@@ -119,6 +119,13 @@ describe('read-only guard', () => {
     }
   });
 
+  it('sends tokens in Quip\'s longer format (with "|" and "=") exactly as given, trimming only the ends', async () => {
+    const token = 'WEROO111111=|11111111|ncnh1eTdWRujGHpIgd3evtOZBDngbyCY9Pt8l9c6j8=';
+    const { c, calls } = client(() => json({ id: 'u1', name: 'Me' }), { token: `  ${token}\n` });
+    await c.currentUser();
+    expect((calls[0]?.init.headers as Record<string, string>).Authorization).toBe(`Bearer ${token}`);
+  });
+
   it('requires https except for loopback test servers', () => {
     expect(() => new QuipClient({ token: 't', baseUrl: 'http://example.com' })).toThrow(/https/);
     expect(() => new QuipClient({ token: 't', baseUrl: 'http://127.0.0.1:8080' })).not.toThrow();
