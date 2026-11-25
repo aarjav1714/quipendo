@@ -1,8 +1,9 @@
 name: Release
 
 # Push a tag such as v0.1.0 (it must match the version in package.json) to publish a release:
-# the extension as a .zip (ready for "Load unpacked" or the Chrome Web Store), with checksums,
-# and the command line tool to npm when an NPM_TOKEN secret exists.
+# the extension as a .zip for Chrome (ready for "Load unpacked" or the Chrome Web Store) and one for Firefox, the source
+# that addons.mozilla.org asks for, checksums, and the command line tool to npm when an NPM_TOKEN secret exists.
+# The Safari extension is built with Xcode on a Mac (docs/safari.md), so it is not attached here.
 on:
   push:
     tags: ['v*']
@@ -38,20 +39,23 @@ jobs:
 
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
+      - run: npm run e2e:firefox
+      - run: npx --yes web-ext@10.8.0 lint -s dist-firefox --warnings-as-errors
 
-      - name: Package the extension
+      - name: Package the extension for each browser, and the source
         run: |
-          zip="quipendo-extension-${GITHUB_REF_NAME}.zip"
-          (cd dist && zip -r -X "../$zip" .)
-          sha256sum "$zip" > SHA256SUMS.txt
-          unzip -l "$zip"
+          (cd dist && zip -r -X "../quipendo-chrome-${GITHUB_REF_NAME}.zip" .)
+          (cd dist-firefox && zip -r -X "../quipendo-firefox-${GITHUB_REF_NAME}.zip" .)
+          git archive --format=zip --prefix="quipendo-${GITHUB_REF_NAME}/" -o "quipendo-source-${GITHUB_REF_NAME}.zip" HEAD
+          sha256sum quipendo-*-"${GITHUB_REF_NAME}".zip > SHA256SUMS.txt
+          for zip in quipendo-chrome-*.zip quipendo-firefox-*.zip; do unzip -l "$zip"; done
 
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            "quipendo-extension-${GITHUB_REF_NAME}.zip" SHA256SUMS.txt \
+            "quipendo-chrome-${GITHUB_REF_NAME}.zip" "quipendo-firefox-${GITHUB_REF_NAME}.zip" "quipendo-source-${GITHUB_REF_NAME}.zip" SHA256SUMS.txt \
             --title "Quipendo ${GITHUB_REF_NAME}" \
             --generate-notes \
             --verify-tag

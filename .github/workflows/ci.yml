@@ -43,6 +43,56 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
 
+  e2e-firefox:
+    name: Browser tests in Firefox
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The runner image has Firefox and geckodriver; Selenium Manager finds them.
+      - run: npm run e2e:firefox
+
+  lint-firefox:
+    name: Firefox package lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:firefox
+      - run: npx --yes web-ext@10.8.0 lint -s dist-firefox --warnings-as-errors
+
+  safari:
+    name: Safari package builds (macOS)
+    runs-on: macos-latest
+    # The conversion and the build below have not run anywhere yet (docs/safari.md says why). Remove this line once the job has passed.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:safari
+      - name: Convert it to an Xcode project
+        run: |
+          xcrun safari-web-extension-converter dist-safari \
+            --project-location "$RUNNER_TEMP/safari" --app-name Quipendo \
+            --bundle-identifier io.github.aarjav1714.quipendo \
+            --macos-only --no-open --no-prompt --copy-resources
+      - name: Build it without signing
+        run: |
+          xcodebuild -project "$RUNNER_TEMP/safari/Quipendo/Quipendo.xcodeproj" \
+            -scheme "Quipendo (macOS)" -configuration Release CODE_SIGNING_ALLOWED=NO build
+
   # The package people install must run on every Node version it claims to support, not just the one it was built on.
   package:
     name: Installed package on Node ${{ matrix.node }}

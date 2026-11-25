@@ -6,7 +6,7 @@ Everything needed to fill in the listing is here. Submitting it needs your own d
 
 1. Register at the [developer dashboard](https://chrome.google.com/webstore/devconsole). There is a one-time registration fee, and Google's page lists the [supported countries](https://developer.chrome.com/docs/webstore/register). Use an email you check often: review messages and policy warnings go there, and it cannot be changed later.
 2. Publish the [privacy policy](../PRIVACY.md) at a public address (its address on GitHub works once it is pushed): `https://github.com/aarjav1714/quipendo/blob/main/PRIVACY.md`.
-3. Get the package: the `quipendo-extension-<version>.zip` attached to a [release](https://github.com/aarjav1714/quipendo/releases) (the release workflow builds it from a version tag), or build it yourself with `npm run build` and zip the *contents* of `dist/`, so `manifest.json` is at the top of the zip.
+3. Get the package: the `quipendo-chrome-<version>.zip` attached to a [release](https://github.com/aarjav1714/quipendo/releases) (the release workflow builds it from a version tag), or build it yourself with `npm run build` and zip the *contents* of `dist/`, so `manifest.json` is at the top of the zip.
 4. The listing images are in [`assets/store/`](../assets/store). `npm run store-assets` rebuilds them from the real extension page and the test account, and `npm run icons` rebuilds the store icon.
 
 ## Listing
@@ -33,7 +33,7 @@ Everything needed to fill in the listing is here. Submitting it needs your own d
 > You stay in control
 > • Preview one document before exporting anything
 > • Tick the folders and documents you want, filter by name, or export only what changed since a date
-> • Save to a folder (it can be stopped, continued and updated later) or download one .zip
+> • Save to a folder (it can be stopped, continued and updated later), or keep the export in the browser and download it as a .zip
 > • Optional Word (.docx) copies
 >
 > Read-only and private
@@ -58,7 +58,7 @@ Everything needed to fill in the listing is here. Submitting it needs your own d
 
 **Permission justifications** (the dashboard asks for one per permission):
 
-- `storage`: Saves the user's export choices (ticked options, selected folders, folder or .zip output) and, only if the user ticks "Remember", the Quip access token. Without "Remember" the token is kept in session storage only.
+- `storage`: Saves the user's export choices (ticked options, selected folders, folder or browser-storage output) and, only if the user ticks "Remember", the Quip access token. Without "Remember" the token is kept in session storage only.
 - `activeTab`: When the user clicks the toolbar icon while a Quip page is open, reads that tab's address so the export can be limited to that document or folder. Nothing else is read from the page and no script is injected.
 - `declarativeNetRequest`: Installs one dynamic rule that blocks every POST, PUT, PATCH and DELETE request the extension itself sends, so it can never change anything in Quip. It does not block, redirect or modify pages the user visits. (Chrome describes this permission to users as "Block content on any page"; that is the general wording for the API.)
 - Host permission `https://platform.quip.com/*`: Quip's API. Used only for read (GET) requests for the user's documents, folders, comments and files.
