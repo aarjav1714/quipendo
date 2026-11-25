@@ -48,6 +48,8 @@ export function manifestFor(target, base, { e2e = false } = {}) {
   } else if (target === 'safari') {
     manifest.background = { scripts: ['background.js'] };
     manifest.browser_specific_settings = { safari: { strict_min_version: SAFARI_MIN_VERSION } };
+    // Safari never applies request-blocking rules to an extension's own requests (see src/ui/guard.ts), so asking for the permission would only worry the user.
+    manifest.permissions = manifest.permissions.filter((permission) => permission !== 'declarativeNetRequest');
   }
 
   if (e2e) {

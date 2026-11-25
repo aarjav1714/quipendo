@@ -27,8 +27,10 @@ async function verify(target) {
   if (JSON.stringify(manifest.host_permissions) !== JSON.stringify(['https://platform.quip.com/*'])) {
     fail(`host_permissions must be exactly platform.quip.com, got ${JSON.stringify(manifest.host_permissions)}`);
   }
-  const allowedPermissions = ['storage', 'activeTab', 'declarativeNetRequest'];
+  // Safari ignores request-blocking rules for an extension's own requests, so its build does not ask for the permission.
+  const allowedPermissions = target === 'safari' ? ['storage', 'activeTab'] : ['storage', 'activeTab', 'declarativeNetRequest'];
   for (const p of manifest.permissions ?? []) if (!allowedPermissions.includes(p)) fail(`unexpected permission: ${p}`);
+  if (target !== 'safari' && !(manifest.permissions ?? []).includes('declarativeNetRequest')) fail('the read-only guard needs the declarativeNetRequest permission');
   if (manifest.optional_host_permissions) fail('unexpected optional_host_permissions');
 
   // Each browser declares the background script and its own settings differently.

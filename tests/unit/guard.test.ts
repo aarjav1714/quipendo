@@ -12,6 +12,14 @@ describe('browser-level guard rule', () => {
     expect(rule.action.type).toBe('block');
   });
 
+  it('names every request method that can change something, and none that only reads, for each browser', () => {
+    const methods = (browser: 'chrome' | 'firefox') => guardRule('host', browser).condition.requestMethods as string[];
+    for (const browser of ['chrome', 'firefox'] as const) {
+      for (const m of ['post', 'put', 'patch', 'delete', 'connect', 'other']) expect(methods(browser), `${browser} ${m}`).toContain(m);
+      for (const m of ['get', 'head', 'options']) expect(methods(browser), `${browser} ${m}`).not.toContain(m);
+    }
+  });
+
   it('applies to any web address, not just Quip, but only to requests the extension itself makes', () => {
     for (const url of ['https://platform.quip.com/1/threads/edit-document', 'https://acme.quip.com/x', 'https://example.com/', 'http://127.0.0.1:8080/1/x', 'http://localhost/x']) {
       expect(pattern.test(url), url).toBe(true);
@@ -25,12 +33,11 @@ describe('browser-level guard rule', () => {
   });
 
   it('names only the kinds of request each browser accepts, since one it does not know voids the whole rule', () => {
-    const types = (browser: 'chrome' | 'firefox' | 'safari') => guardRule('host', browser).condition.resourceTypes as string[];
+    const types = (browser: 'chrome' | 'firefox') => guardRule('host', browser).condition.resourceTypes as string[];
     expect(types('chrome')).toEqual(expect.arrayContaining(['webtransport', 'webbundle', 'object', 'csp_report']));
     expect(types('firefox')).toEqual(expect.arrayContaining(['object', 'csp_report']));
     for (const t of ['webtransport', 'webbundle']) expect(types('firefox')).not.toContain(t);
-    for (const t of ['webtransport', 'webbundle', 'object', 'csp_report']) expect(types('safari')).not.toContain(t);
-    for (const browser of ['chrome', 'firefox', 'safari'] as const) for (const t of ['main_frame', 'sub_frame', 'xmlhttprequest', 'ping', 'websocket', 'other']) expect(types(browser)).toContain(t);
+    for (const browser of ['chrome', 'firefox'] as const) for (const t of ['main_frame', 'sub_frame', 'xmlhttprequest', 'ping', 'websocket', 'other']) expect(types(browser)).toContain(t);
   });
 });
 
@@ -60,11 +67,35 @@ describe('installing the guard', () => {
     vi.unstubAllGlobals();
   });
 
+  it('falls back to the request methods every browser knows when a method name is refused', async () => {
+    const tried: string[][] = [];
+    withApi(async (arg) => {
+      const methods = (arg.addRules[0]?.condition as { requestMethods?: string[] }).requestMethods ?? [];
+      tried.push(methods);
+      if (methods.includes('other')) throw new Error('`requestMethods` can only contain ...');
+    });
+    expect((await installReadOnlyGuard('firefox')).active).toBe(true);
+    expect(tried).toHaveLength(2);
+    expect(tried[1]).toEqual(['post', 'put', 'delete', 'patch', 'connect']);
+    vi.unstubAllGlobals();
+  });
+
   it('says so, with the browser\'s own words, when no rule can be installed', async () => {
     withApi(() => Promise.reject(new Error('requestMethods is not supported')));
-    const status = await installReadOnlyGuard('safari');
+    const status = await installReadOnlyGuard('chrome');
     expect(status.active).toBe(false);
     expect(status.detail).toContain('requestMethods is not supported');
+    vi.unstubAllGlobals();
+  });
+
+  it('does not claim a guard in Safari, which installs such a rule but never applies it to the extension\'s own requests', async () => {
+    const calls: unknown[] = [];
+    withApi(async (arg) => void calls.push(arg));
+    const status = await installReadOnlyGuard('safari');
+    expect(status.active).toBe(false);
+    expect(status.detail).toMatch(/Safari does not apply request-blocking rules to an extension's own requests/);
+    expect(status.detail).toMatch(/only GET requests/);
+    expect(calls).toEqual([]);
     vi.unstubAllGlobals();
   });
 
