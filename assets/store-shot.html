@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Quipendo store screenshot frame</title>
+    <style>
+      /* A 1280 x 800 Chrome Web Store screenshot: a caption above a real screenshot of the extension page. The script
+         fills in #caption, #sub and #shot. */
+      html,
+      body {
+        margin: 0;
+        width: 1280px;
+        height: 800px;
+        overflow: hidden;
+      }
+      body {
+        position: relative;
+        font-family: 'Avenir Next', 'Helvetica Neue', system-ui, sans-serif;
+        color: #fff;
+        background:
+          radial-gradient(900px 560px at 18% 0%, rgba(139, 92, 246, 0.5), transparent 68%),
+          radial-gradient(700px 480px at 100% 100%, rgba(34, 211, 238, 0.14), transparent 62%),
+          linear-gradient(135deg, #1b0b47 0%, #2a1066 55%, #12072e 100%);
+      }
+      header {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 44px;
+        text-align: center;
+      }
+      h2 {
+        margin: 0;
+        font-size: 46px;
+        line-height: 1.1;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+      p {
+        margin: 12px 0 0;
+        font-size: 22px;
+        color: #d8c8ff;
+      }
+      .stage {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 160px;
+        bottom: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .frame {
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow:
+          0 30px 70px rgba(8, 0, 36, 0.65),
+          0 0 0 1px rgba(255, 255, 255, 0.16);
+      }
+      .frame img {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h2 id="caption"></h2>
+      <p id="sub"></p>
+    </header>
+    <div class="stage"><div class="frame"><img id="shot" alt="" /></div></div>
+  </body>
+</html>

@@ -1,0 +1,42 @@
+# Quipendo privacy policy
+
+*Last updated 25 November 2026.*
+
+Quipendo copies your own Quip documents to Markdown files on your computer. It has no server, no accounts, no analytics and no advertising. This page says exactly what it handles. It applies to the Chrome extension and to the command line tool, which share one code base.
+
+## What it handles
+
+- **Your Quip access token.** You create it at `quip.com/dev/token` and paste it into Quipendo (the command line reads it from `QUIP_TOKEN` or standard input). It is sent only to Quip's API at `platform.quip.com`, in the `Authorization` header of read requests, and nowhere else. It is never printed or logged.
+- **Your Quip content.** Documents, folders, comments, images, attachments and spreadsheets are fetched from Quip so they can be converted. They pass through your browser (or your terminal), are written only to the folder you choose, or are kept in memory until you save the `.zip` you asked for. They are not sent to the developer or to anyone else.
+- **Your choices.** Which options are ticked, which folders are selected, a document limit and whether to save to a folder or a `.zip`.
+
+## Where it is kept
+
+- **The token** is kept in the browser's session storage, which is erased when the browser closes. Only if you tick *Remember the token on this computer* is it also kept in the extension's local storage, which is unencrypted and inside your browser profile. Unticking *Remember* removes that copy at once, and *Forget token* removes it from the page and from both kinds of storage.
+- **Your choices** are kept in the extension's local storage. The date in *Only documents changed since* is not kept.
+- **The folder you chose.** The browser keeps a handle to it (not its contents), so the page can ask for access again next time.
+- **Exported files** are only in the folder you chose, or in the `.zip` you downloaded. Quipendo does not delete or overwrite files it did not create.
+
+Uninstalling the extension removes everything it stored in the browser. Files already exported stay where you put them.
+
+## What it never does
+
+- It does not send your token, your documents or anything about you anywhere except Quip's API. The extension's content security policy lets its pages connect only to `https://platform.quip.com`, and the browser enforces that.
+- It does not collect analytics, usage statistics or crash reports, use cookies (requests are sent without credentials), load remote code or show advertising.
+- It does not sell or share data, and it does not use data for anything other than the export you asked for.
+- It does not change anything in Quip. Every request is a read. The browser also blocks any write request (`POST`, `PUT`, `PATCH`, `DELETE`) that the extension itself would send, to any address.
+
+## Permissions
+
+- `storage`: your choices and, only if you ask, the token.
+- `activeTab`: when you click the toolbar icon on a Quip page, the address of that tab is read so the export can be limited to that document or folder. Nothing else is read from the page, and no scripts are injected.
+- `declarativeNetRequest`: one rule that blocks write requests sent by the extension, as described above. It does not touch the pages you visit.
+- Access to `https://platform.quip.com/*`: Quip's API, for the read requests.
+
+## Third parties
+
+Quip (a Salesforce service) receives the requests, as it does from any API client, and its own privacy policy applies to the data it holds. Quipendo is an independent project, not affiliated with, endorsed by or sponsored by Salesforce.
+
+## Changes and contact
+
+Changes to this policy are made in this file, so its history shows what changed and when. Questions and reports: [github.com/aarjav1714/quip-md-export/issues](https://github.com/aarjav1714/quip-md-export/issues).
