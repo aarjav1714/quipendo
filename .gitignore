@@ -1,7 +1,12 @@
 node_modules/
 dist/
 dist-e2e/
+dist-firefox/
+dist-e2e-firefox/
+dist-safari/
+dist-e2e-safari/
 dist-cli/
+dist-safari-app/
 .e2e-profile/
 .DS_Store
 *.log

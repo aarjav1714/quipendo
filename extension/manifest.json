@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Quipendo",
   "version": "0.1.0",
-  "description": "Read-only: copies your Quip folders and documents into a local folder as Markdown, including calendars, Kanban boards, project trackers and spreadsheets.",
+  "description": "Read-only: saves your Quip folders and documents as Markdown, including calendars, boards and spreadsheets.",
   "minimum_chrome_version": "110",
   "icons": {
     "16": "icons/icon-16.png",
