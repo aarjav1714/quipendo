@@ -53,6 +53,12 @@ export interface MessageList {
   incomplete: boolean;
 }
 
+/** A document's edit records as Quip sends them, oldest first. */
+export interface EditHistory {
+  records: unknown[];
+  incomplete: boolean;
+}
+
 /** The read-only surface of Quip the exporter depends on. */
 export interface QuipApi {
   currentUser(): Promise<CurrentUser>;
@@ -62,6 +68,7 @@ export interface QuipApi {
   getThreads(ids: string[]): Promise<Map<string, Result<ThreadMeta>>>;
   getThreadHtml(id: string): Promise<string>;
   getMessages(id: string): Promise<MessageList>;
+  getEditHistory(id: string): Promise<EditHistory>;
   getBlob(threadId: string, blobId: string): Promise<BinaryResponse>;
   getSlidesPdf(threadId: string): Promise<BinaryResponse>;
   getXlsx(threadId: string): Promise<BinaryResponse>;

@@ -64,6 +64,8 @@ export interface FixtureThread {
   updated: number;
   pages: string[];
   messages?: FixtureMessage[];
+  /** Document edit records, returned for `message_type=edit`. */
+  edits?: Array<{ id: string; created_usec: number } & Record<string, unknown>>;
   movedTo?: string;
 }
 

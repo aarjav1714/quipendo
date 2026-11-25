@@ -1,5 +1,5 @@
 import { isObj, normalizeCurrentUser, normalizeFolder, normalizeMessage, normalizeThread, normalizeThreadType } from './normalize';
-import type { BinaryResponse, CurrentUser, MessageList, OwnedThread, QuipApi, QuipMessage, Result } from './quipTypes';
+import type { BinaryResponse, CurrentUser, EditHistory, MessageList, OwnedThread, QuipApi, Result } from './quipTypes';
 import type { FolderMeta, ThreadMeta } from './types';
 
 export const DEFAULT_BASE_URL = 'https://platform.quip.com';
@@ -460,21 +460,47 @@ export class QuipClient implements QuipApi {
 
   /** Comments and conversation for a document, oldest first. */
   async getMessages(id: string): Promise<MessageList> {
+    const { items, incomplete } = await this.pageMessages(id, 'message', normalizeMessage);
+    return { messages: items, incomplete };
+  }
+
+  /**
+   * The "document edit" records Quip keeps for a document, exactly as Quip sends them, oldest first. Their contents
+   * are not documented in detail, so they are kept raw rather than interpreted.
+   */
+  async getEditHistory(id: string): Promise<EditHistory> {
+    const { items, incomplete } = await this.pageMessages(id, 'edit', (raw) => {
+      if (!isObj(raw) || typeof raw.id !== 'string' || typeof raw.created_usec !== 'number') return undefined;
+      return { id: raw.id, createdUsec: raw.created_usec, raw };
+    });
+    return { records: items.map((item) => item.raw), incomplete };
+  }
+
+  /** Pages through a document's messages (comments, or edit records) newest first and returns them oldest first. */
+  private async pageMessages<T extends { id: string; createdUsec: number }>(
+    id: string,
+    messageType: 'message' | 'edit',
+    parse: (raw: unknown) => T | undefined,
+  ): Promise<{ items: T[]; incomplete: boolean }> {
     const path = `/1/messages/${requireId(id)}`;
-    const byId = new Map<string, QuipMessage>();
+    const byId = new Map<string, T>();
     let incomplete = false;
     let maxCreated: number | undefined;
     for (let page = 0; page < 1000; page += 1) {
-      const body = await this.getJson(path, { count: this.pageSize, ...(maxCreated !== undefined ? { max_created_usec: maxCreated } : {}) });
+      const body = await this.getJson(path, {
+        count: this.pageSize,
+        ...(messageType === 'edit' ? { message_type: 'edit' } : {}),
+        ...(maxCreated !== undefined ? { max_created_usec: maxCreated } : {}),
+      });
       const list = Array.isArray(body) ? body : isObj(body) && Array.isArray(body.messages) ? body.messages : [];
       let added = 0;
       let oldest = Number.POSITIVE_INFINITY;
       for (const raw of list) {
-        const msg = normalizeMessage(raw);
-        if (!msg) continue;
-        oldest = Math.min(oldest, msg.createdUsec);
-        if (!byId.has(msg.id)) {
-          byId.set(msg.id, msg);
+        const item = parse(raw);
+        if (!item) continue;
+        oldest = Math.min(oldest, item.createdUsec);
+        if (!byId.has(item.id)) {
+          byId.set(item.id, item);
           added += 1;
         }
       }
@@ -484,7 +510,7 @@ export class QuipClient implements QuipApi {
       if (added === 0) incomplete = true;
       maxCreated = added === 0 ? oldest - 1 : oldest;
     }
-    return { messages: [...byId.values()].sort((a, b) => a.createdUsec - b.createdUsec), incomplete };
+    return { items: [...byId.values()].sort((a, b) => a.createdUsec - b.createdUsec), incomplete };
   }
 
   async getBlob(threadId: string, blobId: string): Promise<BinaryResponse> {

@@ -33,6 +33,7 @@ Options:
       --no-comments    Leave out comments and conversation.
       --no-raw         Do not keep Quip's original HTML and metadata (.quip-raw).
       --no-xlsx        Do not save spreadsheets as .xlsx next to their notes.
+      --edit-history   Experimental: also keep Quip's raw edit records for each document in the raw archive (one more request each).
       --docx           Also save Quip's own Word (.docx) copy of each document next to its note (one more request each).
       --no-unfiled     Do not export documents you wrote that are in no folder.
       --token-stdin    Read the token from standard input instead of QUIP_TOKEN.
@@ -82,6 +83,7 @@ function summaryLines(summary: ExportSummary): string[] {
   if (d.notAttempted > 0) parts.push(`${d.notAttempted} not attempted`);
   const lines = [`${summary.stopReason === 'completed' ? 'Done' : 'Stopped'}. ${parts.join(', ')} of ${d.planned} documents.`];
   lines.push(`Attachments: ${summary.attachments.saved} saved, ${summary.attachments.reused} reused, ${summary.attachments.missing} unavailable. Comments exported: ${summary.comments}.`);
+  if (summary.editHistorySaved > 0) lines.push(`Edit history saved for ${summary.editHistorySaved} documents (raw JSON in .quip-raw; experimental).`);
   const embeds = Object.entries(summary.embeds).map(([type, n]) => `${type} ${n}`);
   if (embeds.length > 0) lines.push(`Embedded content converted: ${embeds.join(', ')}.`);
   for (const [code, group] of Object.entries(summary.warnings)) lines.push(`Warning ${code} (${group.count}): ${group.examples.slice(0, 3).join('; ')}`);
@@ -111,6 +113,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
         'no-raw': { type: 'boolean' },
         'no-xlsx': { type: 'boolean' },
         docx: { type: 'boolean' },
+        'edit-history': { type: 'boolean' },
         'no-unfiled': { type: 'boolean' },
         'token-stdin': { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
@@ -140,6 +143,10 @@ export async function main(argv: string[], env: Record<string, string | undefine
       io.err('--limit needs a whole number of 1 or more.');
       return 2;
     }
+  }
+  if (values['edit-history'] && values['no-raw']) {
+    io.err('--edit-history keeps the records in the raw archive, so it cannot be combined with --no-raw.');
+    return 2;
   }
   let sinceUsec: number | undefined;
   if (values.since !== undefined) {
@@ -208,6 +215,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
       keepRaw: !values['no-raw'],
       saveXlsx: !values['no-xlsx'],
       saveDocx: values.docx === true,
+      saveEditHistory: values['edit-history'] === true,
       skipUnchanged: !values.force,
       ...(limit !== undefined ? { maxDocs: limit } : {}),
       ...(sinceUsec !== undefined ? { sinceUsec } : {}),

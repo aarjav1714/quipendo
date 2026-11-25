@@ -86,6 +86,16 @@ describe('exporting an account', () => {
     expect(await readFile(join(dir, 'Private/Reading Log.md'), 'utf8')).toContain('[Reading Log.docx](Reading%20Log.docx)');
   });
 
+  it('--edit-history keeps the raw edit records, and cannot be combined with --no-raw', async () => {
+    const r = await run(['--out', dir, '--edit-history', '--limit', '1']);
+    expect(r.code).toBe(0);
+    expect(r.all).toContain('Edit history saved');
+    expect((await listTree(dir)).some((p) => p.endsWith('/edits.json'))).toBe(true);
+    const clash = await run(['--out', dir, '--edit-history', '--no-raw']);
+    expect(clash.code).toBe(2);
+    expect(clash.err.join(' ')).toContain('cannot be combined with --no-raw');
+  });
+
   it('scans without writing anything or downloading a document', async () => {
     const r = await run(['--out', dir, '--scan-only']);
     expect(r.code).toBe(0);

@@ -190,7 +190,8 @@ export async function startMockQuip(opts: MockOptions = {}): Promise<MockQuip> {
       if (!t) return error(res, 404, 'not found');
       const count = Number(q.get('count') ?? 25);
       const max = q.get('max_created_usec') ? Number(q.get('max_created_usec')) : Number.POSITIVE_INFINITY;
-      const list = (t.messages ?? []).filter((x) => x.created_usec <= max).sort((a, b) => b.created_usec - a.created_usec).slice(0, count);
+      const source: Array<{ created_usec: number }> = q.get('message_type') === 'edit' ? (t.edits ?? []) : (t.messages ?? []);
+      const list = source.filter((x) => x.created_usec <= max).sort((a, b) => b.created_usec - a.created_usec).slice(0, count);
       return send(res, 200, list.map((x) => ({ ...x, updated_usec: x.created_usec, visible: true })));
     }
     if ((m = /^\/1\/blob\/([\w-]+)\/([\w-]+)$/.exec(path))) {

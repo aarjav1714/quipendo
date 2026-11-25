@@ -48,6 +48,11 @@ export interface ExportOptions {
   saveXlsx: boolean;
   /** Also save Quip's own Word (.docx) rendering of each document next to its note. One more request per document. */
   saveDocx: boolean;
+  /**
+   * Experimental: also keep the "document edit" records Quip holds for each document, exactly as Quip sends them,
+   * in the raw archive. One more request per document. Needs `keepRaw`.
+   */
+  saveEditHistory: boolean;
   /** Skip documents whose `updated_usec`, options and link targets match the previous export. */
   skipUnchanged: boolean;
   maxDocs: number | undefined;
@@ -75,6 +80,7 @@ export const DEFAULT_OPTIONS: ExportOptions = {
   keepRaw: true,
   saveXlsx: true,
   saveDocx: false,
+  saveEditHistory: false,
   skipUnchanged: true,
   maxDocs: undefined,
   sinceUsec: undefined,
@@ -183,6 +189,8 @@ export interface ExportSummary {
   reportPath: string;
   /** The browsable index of everything exported so far. */
   indexPath: string;
+  /** Documents whose edit history was saved in this run. */
+  editHistorySaved: number;
 }
 
 interface ThreadState {
@@ -300,6 +308,7 @@ export class Exporter {
   private readonly unresolved = new Set<string>();
   private attachments = { saved: 0, reused: 0, missing: 0 };
   private commentCount = 0;
+  private editHistorySaved = 0;
   private pauses = 0;
   private attachmentsRoot = '';
   private unfiledRoot = '';
@@ -336,7 +345,7 @@ export class Exporter {
   private fingerprint(): string {
     const o = this.opts;
     // The suffix appears only when the option is on, so an export made without it keeps its fingerprint.
-    return `v${FORMAT_VERSION}c${o.includeComments ? 1 : 0}x${o.saveXlsx ? 1 : 0}${o.saveDocx ? 'd1' : ''}`;
+    return `v${FORMAT_VERSION}c${o.includeComments ? 1 : 0}x${o.saveXlsx ? 1 : 0}${o.saveDocx ? 'd1' : ''}${o.saveEditHistory && o.keepRaw ? 'h1' : ''}`;
   }
 
   // ---- state and naming ------------------------------------------------
@@ -717,6 +726,7 @@ export class Exporter {
       rateLimitPauses: this.pauses,
       reportPath,
       indexPath,
+      editHistorySaved: this.editHistorySaved,
     };
     this.emit({ type: 'phase', phase: 'finish', message: stopReason === 'completed' ? 'Writing the report…' : 'Stopped. Progress is saved; run again to continue.' });
     await this.saveState();
@@ -869,6 +879,19 @@ export class Exporter {
       messages = list.messages;
       if (list.incomplete) warnings.push({ code: 'comments-incomplete', detail: 'more comments share one timestamp than Quip lets the tool list' });
       comments = await this.renderComments(t, messages, warnings, flags, linkLog);
+    }
+
+    if (this.opts.saveEditHistory && this.opts.keepRaw && meta.type !== 'slides') {
+      try {
+        const history = await client.getEditHistory(meta.id);
+        await writeRaw('edits.json', JSON.stringify(history.records, null, 1));
+        this.editHistorySaved += 1;
+        if (history.incomplete) warnings.push({ code: 'edit-history-incomplete', detail: 'more edits share one timestamp than Quip lets the tool list' });
+      } catch (err) {
+        if (err instanceof AuthError || isAbortError(err) || this.deps.signal?.aborted) throw err;
+        warnings.push({ code: 'edit-history-failed', detail: err instanceof QuipHttpError ? `HTTP ${err.status}` : errMessage(err) });
+        if (isRetryable(err)) flags.retry = true;
+      }
     }
 
     await this.claimNotePath(t);
@@ -1181,6 +1204,7 @@ export function renderReport(summary: ExportSummary, plan: Plan): string {
     `- Attachments: ${summary.attachments.saved} saved, ${summary.attachments.reused} reused, ${summary.attachments.missing} unavailable`,
     `- Comments exported: ${summary.comments}`,
   );
+  if (summary.editHistorySaved > 0) lines.push(`- Edit history saved for ${summary.editHistorySaved} documents (raw JSON under \`.quip-raw\`; experimental)`);
   const out = summary.leftOut;
   if (out.excluded + out.older > 0) {
     const parts = [out.excluded > 0 ? `${out.excluded} excluded` : '', out.older > 0 ? `${out.older} last changed before ${(out.since ?? '').slice(0, 10) || 'the chosen date'}` : ''].filter(Boolean);

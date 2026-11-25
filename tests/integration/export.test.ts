@@ -556,6 +556,52 @@ describe('the optional Word copy', () => {
   });
 });
 
+describe('the experimental edit history', () => {
+  const records = (n: number): Array<{ id: string; created_usec: number } & Record<string, unknown>> =>
+    Array.from({ length: n }, (_, i) => ({ id: `edit${i}`, created_usec: (1_700_000_000 + i) * 1_000_000, author_id: ME.id, diff_groups: [{ added: `line ${i}` }] }));
+  const editRequests = (c: Ctx = ctx): number => c.mock.requests.filter((r) => r.query.message_type === 'edit').length;
+
+  it('keeps the edit records Quip sends, untouched and across pages, in the raw archive', async () => {
+    const reading = ctx.mock.fixture.threads[T_READING];
+    if (reading) reading.edits = records(5); // the tests list two records per page
+    const summary = await runAll({ saveEditHistory: true });
+    const saved = JSON.parse(await read(`.quip-raw/${T_READING}/edits.json`)) as Array<Record<string, unknown>>;
+    expect(saved.map((r) => r.id)).toEqual(['edit0', 'edit1', 'edit2', 'edit3', 'edit4']);
+    expect(saved[0]).toMatchObject({ author_id: ME.id, diff_groups: [{ added: 'line 0' }] });
+    expect(JSON.parse(await read(`.quip-raw/${T_PLAN}/edits.json`))).toEqual([]); // no records is a result too
+    expect(await visible()).not.toContain('Private/Reading Log.edits.json'); // nothing leaks into the notes
+    expect(await listTree(ctx.dir)).not.toContain('.quip-raw/SLIDESthrd1/edits.json'); // slide decks have no document edits
+    expect(summary.editHistorySaved).toBe(8);
+    expect(editRequests()).toBeGreaterThanOrEqual(8);
+    expect(await read('_Quip export report.md')).toContain('- Edit history saved for 8 documents');
+  });
+
+  it('is off by default, and needs the raw archive it writes into', async () => {
+    await runAll();
+    expect(editRequests()).toBe(0);
+    const noRaw = await setup();
+    await runAll({ saveEditHistory: true, keepRaw: false }, noRaw);
+    expect(editRequests(noRaw)).toBe(0);
+    expect((await listTree(noRaw.dir)).some((p) => p.startsWith('.quip-raw'))).toBe(false);
+  });
+
+  it('turning it on brings existing documents up to date, once', async () => {
+    await runAll();
+    const on = await runAll({ saveEditHistory: true });
+    expect(on.docs.exported).toBe(9);
+    expect((await runAll({ saveEditHistory: true })).docs).toMatchObject({ exported: 0, skipped: 9 });
+  });
+
+  it('reports a refusal and still writes the note', async () => {
+    const refused = await setup({ override: (req) => (req.query.message_type === 'edit' ? { status: 403 } : undefined) });
+    const summary = await runAll({ saveEditHistory: true }, refused);
+    expect(summary.warnings['edit-history-failed']).toMatchObject({ count: 8 });
+    expect(summary.editHistorySaved).toBe(0);
+    expect(await read('Private/Reading Log.md', refused)).toContain('# Reading Log');
+    expect((await runAll({ saveEditHistory: true }, refused)).docs).toMatchObject({ exported: 0, skipped: 9 }); // a refusal is not retried on every run
+  });
+});
+
 describe('never overwriting what this tool did not create', () => {
   it('leaves an existing unrelated note alone and writes the Quip document beside it', async () => {
     await mkdir(join(ctx.dir, 'Private'), { recursive: true });
