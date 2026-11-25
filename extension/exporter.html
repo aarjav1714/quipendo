@@ -23,7 +23,7 @@
           </div>
         </div>
         <p class="lede">
-          Copies your Quip folders and documents into a folder (or one .zip file) on this computer as Markdown files, including calendars,
+          Copies your Quip folders and documents into a folder or a .zip file on this computer as Markdown files, including calendars,
           Kanban boards, project trackers and spreadsheets.
         </p>
         <p class="safe">
@@ -46,6 +46,7 @@
           <button id="btn-forget" type="button" title="Remove the token from this page and from the browser's storage">Forget token</button>
         </div>
         <label class="check"><input id="remember" type="checkbox" /><span>Remember the token on this computer</span></label>
+        <p id="access-notice" class="status" role="status" data-tone="warn" hidden></p>
         <p id="connect-status" class="status" role="status" data-tone="info"></p>
       </section>
 
@@ -71,8 +72,13 @@
 
       <section id="step-target">
         <h2><span class="n">2</span> Choose where to save</h2>
-        <label class="check"><input id="out-folder" type="radio" name="output" checked /><span>A folder on this computer (best: it can be stopped, continued and updated later)</span></label>
-        <label class="check"><input id="out-zip" type="radio" name="output" /><span>One .zip file to download (starts fresh each time, and is kept in memory until you save it)</span></label>
+        <label class="check"><input id="out-folder" type="radio" name="output" checked /><span>A folder on this computer (it can be stopped, continued and updated later)</span></label>
+        <p id="folder-unavailable" class="hint" hidden>This browser cannot write into a folder you choose. Use the option below, or the command-line tool (<code>quipendo</code>) to write straight into a folder.</p>
+        <label class="check"><input id="out-store" type="radio" name="output" /><span>Keep it in this browser, then save it as a .zip (it can be stopped, continued and updated later, too)</span></label>
+        <p id="store-hint" class="hint" hidden>
+          The export is kept in this browser's own storage while you work and stays there until you clear it. Save it as a .zip when you are ready;
+          unzip it anywhere. A very large export is saved as several .zip files.
+        </p>
         <div id="folder-row">
           <div class="row">
             <button id="btn-pick" type="button">Choose folder…</button>
@@ -126,10 +132,22 @@
         <div class="row">
           <button id="btn-run" type="button" class="primary">Start export</button>
           <button id="btn-stop" type="button" disabled>Stop</button>
-          <button id="btn-zip" type="button" class="primary" hidden>Save the .zip</button>
         </div>
         <progress id="progress" value="0" max="1"></progress>
         <p id="run-status" class="status" role="status" data-tone="info"></p>
+        <div id="store-panel" hidden>
+          <h3>Kept in this browser</h3>
+          <p id="store-info" class="status" role="status" data-tone="info"></p>
+          <div class="row">
+            <span id="zip-parts" class="row"></span>
+            <button id="btn-clear" type="button" title="Remove the copy kept in this browser (Quip and any .zip you saved are not touched)">Clear stored copy</button>
+          </div>
+          <div id="clear-confirm" class="row" hidden>
+            <span id="clear-question"></span>
+            <button id="btn-clear-yes" type="button">Yes, clear it</button>
+            <button id="btn-clear-no" type="button">Keep it</button>
+          </div>
+        </div>
         <p class="hint">Keep this tab open while exporting. You can stop at any time and continue later; finished documents are not downloaded again.</p>
         <ol id="log" class="log" aria-label="Export log"></ol>
       </section>

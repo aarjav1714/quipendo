@@ -38,7 +38,13 @@ afterEach(async () => {
   try {
     await janitor.goto(`chrome-extension://${extensionId}/exporter.html?${new URLSearchParams({ e2e: '1', base: mock.url, target: 'e2e-janitor' })}`);
     await janitor.waitForSelector('body[data-state="idle"]');
-    await janitor.evaluate(() => chrome.storage.local.clear());
+    await janitor.evaluate(async () => {
+      await chrome.storage.local.clear();
+      // What a page kept of an export is wiped, too, or the next test would start from it.
+      for (const { name } of await indexedDB.databases()) {
+        if (name) await new Promise((done) => Object.assign(indexedDB.deleteDatabase(name), { onsuccess: done, onerror: done, onblocked: done }));
+      }
+    });
   } finally {
     await janitor.close().catch(() => undefined);
   }
@@ -682,25 +688,32 @@ describe('the extension in a real Chromium', () => {
     await page.close();
   });
 
-  it('saves everything as one .zip that matches a folder export, and starts from scratch every time', async () => {
+  it('keeps the export in the browser, saves it as a .zip that matches a folder export, and continues from it', async () => {
     const page = await openExporter();
     await connect(page);
-    await page.check('#out-zip');
+    await page.check('#out-store');
     await expect(page.isVisible('#folder-row')).resolves.toBe(false);
-    // A .zip has no earlier run to compare with, so there is nothing to skip.
-    await expect(page.isDisabled('#opt-skip')).resolves.toBe(true);
-    await expect(page.isVisible('#btn-zip')).resolves.toBe(false);
+    await expect(page.isVisible('#store-panel')).resolves.toBe(true);
+    await expect.poll(() => page.textContent('#store-info')).toBe('Nothing is kept yet.');
+    await expect(page.isVisible('.zip-part')).resolves.toBe(false);
+    await expect(page.isDisabled('#btn-clear')).resolves.toBe(true);
+    // What is kept can be read back, so unchanged documents can be skipped, as with a folder.
+    await expect(page.isDisabled('#opt-skip')).resolves.toBe(false);
 
     await page.click('#btn-scan');
     await state(page, 'scanned');
     await page.click('#btn-run');
     await state(page, 'done');
-    await expect(page.textContent('#run-status')).resolves.toMatch(/Done\. 9 saved, 0 unchanged of 9 documents\. The report is _Quip export report\.md in the \.zip\./);
-    await expect(page.isVisible('#btn-zip')).resolves.toBe(true);
-    // The chosen folder was not touched.
-    expect(await readTree(page)).toEqual({});
+    await expect(page.textContent('#run-status')).resolves.toMatch(/Done\. 9 saved, 0 unchanged of 9 documents\. The report is _Quip export report\.md in the copy kept in this browser\./);
+    await expect(page.textContent('#store-info')).resolves.toMatch(/^[\d,]+ files, [\d.]+ [KM]B, kept in this browser\.$/);
+    // The folder the page had been given was not touched.
+    await expect(page.evaluate(() => (window as unknown as { __e2e: { readTreeAt(p: string): Promise<object> } }).__e2e.readTreeAt('e2e-target'))).resolves.toEqual({});
+    // The test hook sees the store as it would a folder, and it matches what the Node pipeline writes.
+    expect(comparable(await readTree(page))).toEqual(await nodeReference());
 
-    const first = await saveDownload(page, '#btn-zip');
+    await expect(page.$$('.zip-part')).resolves.toHaveLength(1);
+    await expect(page.textContent('.zip-part')).resolves.toBe('Save as .zip');
+    const first = await saveDownload(page, '.zip-part');
     expect(first.name).toMatch(/^quipendo-export-\d{4}-\d{2}-\d{2}\.zip$/);
     expect(first.bytes.subarray(0, 4)).toEqual(Uint8Array.from([0x50, 0x4b, 0x03, 0x04]));
     const zip = readZip(first.bytes);
@@ -710,33 +723,105 @@ describe('the extension in a real Chromium', () => {
     expect(Object.keys(zip)).toEqual(expect.arrayContaining(['Archive/', 'Desktop/']));
     expect(new TextDecoder().decode(zip['Private/Projects/Project Plan.md']?.data)).toContain('**Calendar** (2021-10)');
     expect(zip['_attachments/PLANthread1/BLOBok00001.png']?.data.length).toBe(PNG_1X1.length);
+    // The state a later run continues from travels in the .zip too.
+    expect(Object.keys(zip)).toContain('.quip-md-export/state.json');
 
-    // Starting again makes a new .zip with everything in it, because nothing from the first one is remembered.
+    // Starting again continues from what is kept: nothing changed in Quip, so nothing is fetched again.
     await page.click('#btn-run');
     await state(page, 'done');
-    await expect(page.textContent('#run-status')).resolves.toMatch(/Done\. 9 saved, 0 unchanged of 9 documents/);
-    const second = await saveDownload(page, '#btn-zip');
-    expect(Object.keys(readZip(second.bytes)).sort()).toEqual(Object.keys(zip).sort());
+    await expect(page.textContent('#run-status')).resolves.toMatch(/Done\. 0 saved, 9 unchanged of 9 documents/);
 
-    // Going back to a folder forgets the scan made for the .zip and hides the download.
+    // Going back to a folder forgets the scan made for the store and hides the store's panel; the stored copy stays.
     await page.check('#out-folder');
-    await expect(page.isVisible('#btn-zip')).resolves.toBe(false);
+    await expect(page.isVisible('#store-panel')).resolves.toBe(false);
     await expect(page.isVisible('#folder-row')).resolves.toBe(true);
-    await expect(page.isDisabled('#opt-skip')).resolves.toBe(false);
     await expect(page.isVisible('#tree-panel')).resolves.toBe(false);
+    await page.check('#out-store');
+    await expect.poll(() => page.textContent('#store-info')).toMatch(/^[\d,]+ files, /);
     await page.close();
   });
 
-  it('says so when a .zip would be too big, and still lets the user save what fit', async () => {
-    const page = await openExporter({ zipMax: '2500' });
+  it('is still there after the page is closed: it can be saved, continued and cleared in a later visit', async () => {
+    const page = await openExporter();
     await connect(page);
-    await page.check('#out-zip');
+    await page.check('#out-store');
+    await page.fill('#opt-max', '2');
+    await page.click('#btn-run');
+    await state(page, 'done');
+    await expect(page.textContent('#run-status')).resolves.toMatch(/2 saved, 0 unchanged of 2 documents/);
+    await page.close();
+
+    // A new visit finds the choice and the stored copy as they were left, before anything is connected.
+    const again = await openExporter();
+    await expect(again.isChecked('#out-store')).resolves.toBe(true);
+    await expect(again.textContent('#store-info')).resolves.toMatch(/^[\d,]+ files, .* kept in this browser\.$/);
+    await expect(again.isVisible('.zip-part')).resolves.toBe(true);
+    const part = await saveDownload(again, '.zip-part');
+    const names = Object.keys(readZip(part.bytes));
+    expect(names.filter((name) => name.endsWith('.md') && !name.startsWith('_'))).toHaveLength(2);
+
+    await connect(again);
+    await again.fill('#opt-max', '');
+    await again.click('#btn-run');
+    await state(again, 'done');
+    // Two were kept; the other seven are new. A note whose links could not be resolved the first time is rendered again.
+    await expect(again.textContent('#run-status')).resolves.toMatch(/Done\. 8 saved, 1 unchanged of 9 documents/);
+
+    // Clearing asks first, and keeping it changes nothing.
+    await again.click('#btn-clear');
+    await expect(again.isVisible('#clear-confirm')).resolves.toBe(true);
+    await expect(again.textContent('#clear-question')).resolves.toContain('Quip is not touched, and a .zip you already saved stays where it is');
+    await again.click('#btn-clear-no');
+    await expect(again.isVisible('#clear-confirm')).resolves.toBe(false);
+    await expect(again.textContent('#store-info')).resolves.toMatch(/^[\d,]+ files/);
+    await again.click('#btn-clear');
+    await again.click('#btn-clear-yes');
+    await expect.poll(() => again.textContent('#store-info')).toBe('Nothing is kept yet.');
+    await expect(again.isVisible('.zip-part')).resolves.toBe(false);
+    expect(await readTree(again)).toEqual({});
+
+    // The next export starts from nothing.
+    await again.click('#btn-run');
+    await state(again, 'done');
+    await expect(again.textContent('#run-status')).resolves.toMatch(/Done\. 9 saved, 0 unchanged of 9 documents/);
+    await again.close();
+  });
+
+  it('saves a big export as several .zip files that together hold everything', async () => {
+    const page = await openExporter({ partEntries: '20' });
+    await connect(page);
+    await page.check('#out-store');
+    await page.click('#btn-run');
+    await state(page, 'done');
+    const buttons = await page.$$eval('.zip-part', (all) => all.map((b) => b.textContent));
+    expect(buttons.length).toBeGreaterThan(1);
+    expect(buttons[0]).toBe(`Save part 1 of ${buttons.length} (.zip)`);
+
+    const files: Record<string, string> = {};
+    for (let i = 0; i < buttons.length; i += 1) {
+      const [download] = await Promise.all([page.waitForEvent('download'), page.locator('.zip-part').nth(i).click()]);
+      expect(download.suggestedFilename()).toMatch(new RegExp(`^quipendo-export-\\d{4}-\\d{2}-\\d{2}-part-${i + 1}-of-${buttons.length}\\.zip$`));
+      const zip = readZip(new Uint8Array(await readFile((await download.path()) as string)));
+      expect(Object.keys(zip).length).toBeLessThanOrEqual(20);
+      for (const [name, text] of Object.entries(zipFiles(zip))) {
+        expect(files[name], `${name} is in two parts`).toBeUndefined();
+        files[name] = text;
+      }
+    }
+    expect(comparable(files)).toEqual(withoutDirs(await nodeReference()));
+    await page.close();
+  });
+
+  it('says so when the browser has no room, and still lets the user save what fit', async () => {
+    const page = await openExporter({ storeMax: '2500' });
+    await connect(page);
+    await page.check('#out-store');
     await page.uncheck('#opt-raw');
     await page.click('#btn-run');
     await state(page, 'error');
-    await expect(page.textContent('#run-status')).resolves.toContain('too much to build as one .zip file in the browser. Save to a folder instead. Save the .zip to keep what was exported.');
-    await expect(page.isVisible('#btn-zip')).resolves.toBe(true);
-    const saved = await saveDownload(page, '#btn-zip');
+    await expect(page.textContent('#run-status')).resolves.toContain('The browser has no room left to keep the export. Save what is stored as a .zip, then clear it and carry on with the rest.');
+    await expect(page.isVisible('.zip-part')).resolves.toBe(true);
+    const saved = await saveDownload(page, '.zip-part');
     const notes = Object.keys(readZip(saved.bytes)).filter((name) => name.endsWith('.md'));
     expect(notes.length).toBeGreaterThan(0);
     expect(notes.length).toBeLessThan(9);
@@ -790,18 +875,18 @@ describe('the extension in a real Chromium', () => {
     }
   });
 
-  it('keeps what a .zip had collected when Quip rejects the token part-way, and says to save it', async () => {
+  it('keeps what was exported when Quip rejects the token part-way, and says so', async () => {
     let htmlRequests = 0;
     const flaky = await startMockQuip({ override: (req) => (req.path.endsWith('/html') && ++htmlRequests > 2 ? { status: 401 } : undefined) });
     const page = await openExporter({ base: flaky.url });
     try {
       await connect(page);
-      await page.check('#out-zip');
+      await page.check('#out-store');
       await page.click('#btn-run');
       await state(page, 'idle');
-      await expect(page.textContent('#run-status')).resolves.toContain('Stopped: Quip rejected the access token. Create a new one at quip.com/dev/token and connect again. Save the .zip to keep what was exported.');
-      await expect(page.isVisible('#btn-zip')).resolves.toBe(true);
-      const zip = readZip((await saveDownload(page, '#btn-zip')).bytes);
+      await expect(page.textContent('#run-status')).resolves.toContain('Stopped: Quip rejected the access token. Create a new one at quip.com/dev/token and connect again. What was exported so far is kept in this browser. The report lists what was not exported.');
+      await expect(page.isVisible('.zip-part')).resolves.toBe(true);
+      const zip = readZip((await saveDownload(page, '.zip-part')).bytes);
       expect(Object.keys(zip).filter((name) => name.endsWith('.md') && !name.startsWith('_')).length).toBeGreaterThan(0);
       expect(new TextDecoder().decode(zip['_Quip export report.md']?.data)).toContain('Stopped: Quip rejected the access token');
     } finally {

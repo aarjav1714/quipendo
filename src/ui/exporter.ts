@@ -4,8 +4,6 @@ import {
   MemorySink,
   QuipClient,
   QuipHttpError,
-  SinkFullError,
-  ZipSink,
   createSession,
   parseQuipUrl,
   quipIdFrom,
@@ -20,7 +18,9 @@ import {
 import { FsaSink } from './fsaSink';
 import { installReadOnlyGuard } from './guard';
 import { idbGet, idbSet } from './idb';
+import { MemoryBackend, StoreSink, zipFileName, type StoreStats, type ZipPart } from './storeSink';
 import { renderPlanTree, type PlanTree } from './tree';
+import { TARGET, ext, hasHostAccess, requestHostAccess, sessionStore } from './webext';
 
 declare const __E2E__: boolean;
 
@@ -50,7 +50,8 @@ interface Settings {
   skipUnchanged: boolean;
   includeUnfiled: boolean;
   maxDocs: string;
-  output: 'folder' | 'zip';
+  /** A folder the user picked, or the browser's own storage (saved as a .zip). */
+  output: 'folder' | 'store';
   roots: string[] | null;
 }
 
@@ -81,6 +82,8 @@ const KIND_LABEL: Record<RootChoice['kind'], string> = {
 const params = new URLSearchParams(location.search);
 const E2E = __E2E__ && params.get('e2e') === '1';
 const BASE_URL = E2E ? (params.get('base') ?? DEFAULT_BASE_URL) : DEFAULT_BASE_URL;
+/** Only Chromium browsers can write into a folder the user picks; the others keep the export in the browser instead. */
+const CAN_PICK_FOLDER = typeof (window as { showDirectoryPicker?: unknown }).showDirectoryPicker === 'function';
 
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -101,9 +104,12 @@ const ui = {
   previewText: byId<HTMLTextAreaElement>('preview-text'),
   copy: byId<HTMLButtonElement>('btn-copy'),
   downloadMd: byId<HTMLButtonElement>('btn-download-md'),
+  accessNotice: byId('access-notice'),
   outFolder: byId<HTMLInputElement>('out-folder'),
-  outZip: byId<HTMLInputElement>('out-zip'),
+  outStore: byId<HTMLInputElement>('out-store'),
   folderRow: byId('folder-row'),
+  folderUnavailable: byId('folder-unavailable'),
+  storeHint: byId('store-hint'),
   pick: byId<HTMLButtonElement>('btn-pick'),
   regrant: byId<HTMLButtonElement>('btn-regrant'),
   targetName: byId('target-name'),
@@ -134,9 +140,16 @@ const ui = {
   treeCount: byId('tree-count'),
   run: byId<HTMLButtonElement>('btn-run'),
   stop: byId<HTMLButtonElement>('btn-stop'),
-  zip: byId<HTMLButtonElement>('btn-zip'),
   progress: byId<HTMLProgressElement>('progress'),
   runStatus: byId('run-status'),
+  storePanel: byId('store-panel'),
+  storeInfo: byId('store-info'),
+  zipParts: byId('zip-parts'),
+  clear: byId<HTMLButtonElement>('btn-clear'),
+  clearConfirm: byId('clear-confirm'),
+  clearQuestion: byId('clear-question'),
+  clearYes: byId<HTMLButtonElement>('btn-clear-yes'),
+  clearNo: byId<HTMLButtonElement>('btn-clear-no'),
   log: byId('log'),
   guard: byId('guard-status'),
   version: byId('version'),
@@ -160,9 +173,17 @@ let working = false;
 let pendingFrom: string | undefined;
 let throttleUntil = 0;
 let exportStartedAt = 0;
-/** Save to a .zip held in memory instead of a folder. */
-let zipMode = false;
-let zipSink: ZipSink | undefined;
+/** Keep the export in the browser's own storage, to be saved as a .zip, instead of writing into a folder. */
+let storeMode = false;
+let store: StoreSink | undefined;
+/** True when the browser would not give the extension storage of its own, so the export is only held in memory. */
+let storeInMemory = false;
+/** How much the store holds, and the .zip files it would be saved as. Read again whenever the store changes. */
+let storeStats: StoreStats = { files: 0, bytes: 0 };
+let storeParts: ZipPart[] = [];
+let confirmingClear = false;
+/** Whether the browser lets the extension contact Quip yet; undefined when it cannot say. */
+let hostAccess: boolean | undefined;
 /** The folder and document tree of the last scan, and what the user unticked in it. */
 let tree: PlanTree | undefined;
 let excluded = new Set<string>();
@@ -214,7 +235,7 @@ function setPhase(next: Phase): void {
   refresh();
 }
 
-const hasDestination = (): boolean => zipMode || target !== undefined;
+const hasDestination = (): boolean => storeMode || target !== undefined;
 
 function refresh(): void {
   const busy = phase === 'loading' || phase === 'connecting' || phase === 'scanning' || phase === 'running' || phase === 'previewing';
@@ -230,10 +251,8 @@ function refresh(): void {
   ui.stop.disabled = phase !== 'connecting' && phase !== 'scanning' && phase !== 'running' && phase !== 'previewing';
   ui.preview.disabled = busy || !conn;
   ui.previewUrl.disabled = busy;
-  for (const el of [ui.comments, ui.raw, ui.xlsx, ui.docx, ui.unfiled, ui.max, ui.since, ui.scopeAll, ui.scopePage, ui.outFolder, ui.outZip]) el.disabled = busy;
-  // A .zip starts from nothing every time, so there is never anything to skip.
-  ui.skip.disabled = busy || zipMode;
-  ui.skip.title = zipMode ? 'A .zip starts from nothing every time, so there is nothing to skip.' : '';
+  for (const el of [ui.comments, ui.raw, ui.xlsx, ui.docx, ui.unfiled, ui.max, ui.since, ui.scopeAll, ui.scopePage, ui.skip, ui.outStore]) el.disabled = busy;
+  ui.outFolder.disabled = busy || !CAN_PICK_FOLDER;
   // These only mean something together with the option they depend on.
   ui.anchor.disabled = busy || !ui.comments.checked;
   ui.edits.disabled = busy || !ui.raw.checked;
@@ -242,16 +261,26 @@ function refresh(): void {
   ui.treeNone.disabled = busy;
   for (const box of ui.tree.querySelectorAll('input, button')) (box as HTMLInputElement | HTMLButtonElement).disabled = busy;
   for (const box of ui.roots.querySelectorAll('input')) box.disabled = busy;
-  ui.folderRow.hidden = zipMode;
-  // Whatever the last run built can be saved, even after it stopped or failed: a .zip cannot be continued later.
-  ui.zip.hidden = !(zipMode && zipSink && zipSink.size > 0 && !busy);
+  ui.folderRow.hidden = storeMode;
+  ui.folderUnavailable.hidden = CAN_PICK_FOLDER;
+  ui.storeHint.hidden = !storeMode;
+  // What the store holds can be saved even after a run stopped or failed, and in a later visit to this page.
+  ui.storePanel.hidden = !storeMode;
+  for (const button of ui.zipParts.querySelectorAll('button')) button.disabled = busy;
+  ui.clear.hidden = confirmingClear;
+  ui.clear.disabled = busy || storeStats.files === 0;
+  ui.clearConfirm.hidden = !confirmingClear;
+  ui.clearYes.disabled = busy;
+  ui.clearNo.disabled = busy;
 }
 
 // ---- settings and token --------------------------------------------------
 
 async function loadSettings(): Promise<Settings> {
-  const stored = (await chrome.storage.local.get('settings')) as { settings?: Partial<Settings> };
-  return { ...DEFAULT_SETTINGS, ...(stored.settings ?? {}) };
+  const stored = (await ext.storage.local.get('settings')) as { settings?: Partial<Settings> & { output?: string } };
+  const settings = { ...DEFAULT_SETTINGS, ...(stored.settings ?? {}) };
+  // Before the export could be kept in the browser, a .zip was the other choice, and was called "zip".
+  return { ...settings, output: settings.output === 'folder' ? 'folder' : 'store' };
 }
 
 function currentSettings(roots: string[] | null): Settings {
@@ -266,7 +295,7 @@ function currentSettings(roots: string[] | null): Settings {
     skipUnchanged: ui.skip.checked,
     includeUnfiled: ui.unfiled.checked,
     maxDocs: ui.max.value.trim(),
-    output: zipMode ? 'zip' : 'folder',
+    output: storeMode ? 'store' : 'folder',
     roots,
   };
 }
@@ -274,20 +303,20 @@ function currentSettings(roots: string[] | null): Settings {
 async function saveSettings(): Promise<void> {
   // Before connecting there are no folder checkboxes to read, so the selection saved earlier is kept.
   const roots = conn ? selectedRoots() : (await loadSettings()).roots;
-  await chrome.storage.local.set({ settings: currentSettings(roots) });
+  await ext.storage.local.set({ settings: currentSettings(roots) });
 }
 
 async function loadToken(): Promise<string | undefined> {
-  const session = (await chrome.storage.session.get('token')) as { token?: string };
-  if (session.token) return session.token;
-  const local = (await chrome.storage.local.get('token')) as { token?: string };
+  const fromSession = (await sessionStore.get('token')) as string | undefined;
+  if (fromSession) return fromSession;
+  const local = (await ext.storage.local.get('token')) as { token?: string };
   return local.token;
 }
 
 async function saveToken(token: string, remember: boolean): Promise<void> {
-  await chrome.storage.session.set({ token });
-  if (remember) await chrome.storage.local.set({ token });
-  else await chrome.storage.local.remove('token');
+  await sessionStore.set('token', token);
+  if (remember) await ext.storage.local.set({ token });
+  else await ext.storage.local.remove('token');
 }
 
 // ---- target folder -------------------------------------------------------
@@ -344,6 +373,111 @@ async function restoreTarget(): Promise<void> {
 async function regrantTarget(): Promise<void> {
   if (!pendingHandle) return;
   if ((await pendingHandle.requestPermission({ mode: 'readwrite' })) === 'granted') await useTarget(pendingHandle);
+}
+
+// ---- the export kept in the browser --------------------------------------
+
+/** Opens the browser's own storage for the export, or memory where the browser will not give the extension any. */
+async function openStore(): Promise<StoreSink> {
+  if (store) return store;
+  // Test builds can shrink the store's size limit to reach the "no room left" path without gigabytes of data.
+  const options = __E2E__ && params.has('storeMax') ? { maxBytes: Number(params.get('storeMax')) } : {};
+  try {
+    store = await StoreSink.openInBrowser(options);
+  } catch {
+    store = await StoreSink.open(new MemoryBackend(), options);
+    storeInMemory = true;
+  }
+  return store;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} bytes`;
+  let value = bytes / 1024;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 100 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+}
+
+function renderStorePanel(): void {
+  const { files, bytes } = storeStats;
+  const where = storeInMemory
+    ? 'held in memory only, because this browser would not give the extension storage of its own; it is lost when this tab closes, so save it before then'
+    : 'kept in this browser';
+  setStatus(ui.storeInfo, files === 0 ? 'Nothing is kept yet.' : `${files.toLocaleString()} files, ${formatBytes(bytes)}, ${where}.`, storeInMemory ? 'warn' : 'info');
+  ui.zipParts.replaceChildren();
+  for (const part of storeParts) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'zip-part primary';
+    button.textContent = part.count === 1 ? 'Save as .zip' : `Save part ${part.index} of ${part.count} (.zip)`;
+    button.title = `${part.entries.toLocaleString()} files and folders, about ${formatBytes(part.bytes)} before compression`;
+    button.addEventListener('click', () => void saveZip(part));
+    ui.zipParts.append(button);
+  }
+  ui.clearQuestion.textContent = `Remove ${files.toLocaleString()} files (${formatBytes(bytes)}) from this browser? Quip is not touched, and a .zip you already saved stays where it is. Anything not saved as a .zip yet is gone; exporting again makes a new copy.`;
+}
+
+/** Reads what the store holds, and what .zip files it would make, so the panel shows the truth after every change. */
+async function readStore(): Promise<void> {
+  if (!storeMode) return;
+  try {
+    const open = await openStore();
+    storeStats = await open.stats();
+    const budget = __E2E__ && params.has('partEntries') ? { maxEntries: Number(params.get('partEntries')) } : {};
+    storeParts = storeStats.files > 0 ? await open.zipParts(budget) : [];
+  } catch (err) {
+    storeStats = { files: 0, bytes: 0 };
+    storeParts = [];
+    setStatus(ui.runStatus, `The browser's storage could not be read: ${describeError(err)}`, 'error');
+  }
+  if (storeStats.files === 0) confirmingClear = false;
+  renderStorePanel();
+  refresh();
+}
+
+/** Builds one .zip of the stored export and hands it to the browser, which saves it. */
+async function saveZip(part: ZipPart): Promise<void> {
+  const name = zipFileName(part);
+  const buttons = [...ui.zipParts.querySelectorAll('button')];
+  for (const button of buttons) button.disabled = true;
+  setStatus(ui.runStatus, `Building ${name}…`);
+  try {
+    const blob = await part.build();
+    const url = download(blob, name, ZIP_LINK_MS);
+    setStatus(ui.runStatus, `${name} (${formatBytes(blob.size)}) was sent to your browser to save.`, 'ok');
+    // A browser that wants a click on the file itself, not on a button that had to build it first, gets that here.
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    link.textContent = 'Save it again';
+    ui.runStatus.append(' ', link);
+    window.setTimeout(() => link.remove(), ZIP_LINK_MS);
+  } catch (err) {
+    setStatus(ui.runStatus, `Could not build ${name}: ${describeError(err)}`, 'error');
+  } finally {
+    for (const button of buttons) button.disabled = phase === 'running';
+  }
+}
+
+async function clearStore(): Promise<void> {
+  await exclusive(async () => {
+    try {
+      await (await openStore()).clear();
+      epoch += 1;
+      session = undefined;
+      hidePlan();
+      confirmingClear = false;
+      await readStore();
+      setStatus(ui.runStatus, 'The copy kept in this browser was cleared. The next export starts from nothing.', 'ok');
+    } catch (err) {
+      setStatus(ui.runStatus, `Could not clear it: ${describeError(err)}`, 'error');
+    }
+  });
 }
 
 // ---- connection and scope ------------------------------------------------
@@ -419,6 +553,25 @@ async function lookUpPage(client: QuipClient, url: string): Promise<PageLookup> 
   }
 }
 
+/** Where each browser lets a person give an extension access to a site. */
+function accessHelp(): string {
+  const site = new URL(BASE_URL).host;
+  switch (TARGET) {
+    case 'safari':
+      return `In Safari, open Settings → Extensions → Quipendo and set ${site} to Allow.`;
+    case 'firefox':
+      return `In Firefox, open the add-ons manager (about:addons), choose Quipendo, then Permissions, and allow it to access your data for ${site}.`;
+    default:
+      return `Open the extensions page of your browser, choose Quipendo, then Details, and allow it on ${site} under Site access.`;
+  }
+}
+
+function showAccessNotice(): void {
+  const missing = hostAccess === false;
+  ui.accessNotice.hidden = !missing;
+  if (missing) setStatus(ui.accessNotice, `Your browser has not given Quipendo access to ${new URL(BASE_URL).host} yet. Press Connect and allow it when asked.`, 'warn');
+}
+
 const connectedText = (): string => {
   const user = conn?.user;
   const site = user?.siteUrl ? ` (${new URL(user.siteUrl).host})` : '';
@@ -431,6 +584,16 @@ async function connect(): Promise<void> {
     if (!token) {
       setStatus(ui.connectStatus, 'Paste your Quip access token first.', 'warn');
       return;
+    }
+    // A browser only asks the user for access when the request comes straight from the click, so nothing is awaited before it.
+    if (hostAccess === false) {
+      const granted = await requestHostAccess(BASE_URL);
+      hostAccess = granted ? true : false;
+      showAccessNotice();
+      if (!granted) {
+        setStatus(ui.connectStatus, `Quipendo was not allowed to contact ${new URL(BASE_URL).host}, so it cannot connect. ${accessHelp()}`, 'error');
+        return;
+      }
     }
     controller = new AbortController();
     setPhase('connecting');
@@ -459,7 +622,13 @@ async function connect(): Promise<void> {
       setPhase('connected');
     } catch (err) {
       conn = undefined;
-      setStatus(ui.connectStatus, isAbort(err) ? 'Connecting was cancelled.' : describeError(err), isAbort(err) ? 'warn' : 'error');
+      // No answer at all, as opposed to a refusal from Quip, is what a browser that withholds the site gives.
+      const noAnswer = err instanceof Error && err.message.startsWith('Network error');
+      setStatus(
+        ui.connectStatus,
+        isAbort(err) ? 'Connecting was cancelled.' : noAnswer ? `${describeError(err)} If your browser has not allowed Quipendo to contact ${new URL(BASE_URL).host}: ${accessHelp()}` : describeError(err),
+        isAbort(err) ? 'warn' : 'error',
+      );
       setPhase('idle');
     }
   });
@@ -563,11 +732,9 @@ function handleEvent(event: ExportEvent): void {
   }
 }
 
-function makeSession(signal: AbortSignal, withExclusions = true): ReturnType<typeof createSession> {
+async function makeSession(signal: AbortSignal, withExclusions = true): Promise<ReturnType<typeof createSession>> {
   if (!conn || !hasDestination()) throw new Error('Connect to Quip and choose where to save first.');
-  // Test builds can shrink the .zip's size limit to reach the "too big" path without gigabytes of data.
-  const zipLimits = __E2E__ && params.has('zipMax') ? { maxBytes: Number(params.get('zipMax')) } : {};
-  const sink = zipMode ? (zipSink = new ZipSink(zipLimits)) : new FsaSink(target as FileSystemDirectoryHandle);
+  const sink = storeMode ? await openStore() : new FsaSink(target as FileSystemDirectoryHandle);
   return createSession({
     token: conn.token,
     baseUrl: BASE_URL,
@@ -581,13 +748,13 @@ function makeSession(signal: AbortSignal, withExclusions = true): ReturnType<typ
   });
 }
 
-const scopeKey = (withExclusions = true): string => JSON.stringify([buildOptions(withExclusions), epoch, zipMode]);
+const scopeKey = (withExclusions = true): string => JSON.stringify([buildOptions(withExclusions), epoch, storeMode]);
 
 /** Wipes the token from the page and from both kinds of browser storage, and disconnects. */
 async function forgetToken(): Promise<void> {
   await exclusive(async () => {
-    await chrome.storage.session.remove('token');
-    await chrome.storage.local.remove('token');
+    await sessionStore.remove('token');
+    await ext.storage.local.remove('token');
     ui.token.value = '';
     ui.remember.checked = false;
     conn = undefined;
@@ -686,7 +853,7 @@ async function scan(): Promise<void> {
     try {
       controller = new AbortController();
       // The scan ignores what was unticked, so the tree always shows everything; the export leaves it out.
-      session = makeSession(controller.signal, false);
+      session = await makeSession(controller.signal, false);
       sessionKey = scopeKey(false);
       await saveSettings();
       hidePlan(true);
@@ -719,7 +886,7 @@ function summarize(s: ExportSummary): string {
   const parts = [`${s.docs.exported} saved`, `${s.docs.skipped} unchanged`];
   if (s.docs.failed > 0) parts.push(`${s.docs.failed} failed`);
   if (s.docs.notAttempted > 0) parts.push(`${s.docs.notAttempted} not attempted`);
-  return `${parts.join(', ')} of ${s.docs.planned} documents. The report is ${s.reportPath} ${zipMode ? 'in the .zip' : 'in the target folder'}.`;
+  return `${parts.join(', ')} of ${s.docs.planned} documents. The report is ${s.reportPath} ${storeMode ? 'in the copy kept in this browser' : 'in the target folder'}.`;
 }
 
 /** Held by the one exporter tab that is writing, so two tabs can never pick the same file name for different documents. */
@@ -733,7 +900,7 @@ async function runExport(): Promise<Phase> {
     if (session && !(await session.exporter.isStateCurrent())) session = undefined;
     if (!session || !controller || controller.signal.aborted || sessionKey !== scopeKey()) {
       controller = new AbortController();
-      session = makeSession(controller.signal);
+      session = await makeSession(controller.signal);
       sessionKey = scopeKey();
     }
     if (stopRequested) {
@@ -745,8 +912,7 @@ async function runExport(): Promise<Phase> {
     release = await acquireWakeLock();
     const summary = await active.exporter.run();
     if (summary.aborted) {
-      const next = zipMode ? 'Save the .zip to keep what was exported; starting again begins from scratch.' : 'Start again to continue where it left off.';
-      setStatus(ui.runStatus, `Stopped. ${summarize(summary)} ${next}`, 'warn');
+      setStatus(ui.runStatus, `Stopped. ${summarize(summary)} Start again to continue where it left off.`, 'warn');
       return 'stopped';
     }
     ui.progress.value = ui.progress.max;
@@ -754,15 +920,9 @@ async function runExport(): Promise<Phase> {
     return 'done';
   } catch (err) {
     if (err instanceof AuthError) rejectToken();
-    const keepsPartial = zipMode && zipSink !== undefined && zipSink.size > 0;
-    const keepIt = 'Save the .zip to keep what was exported.';
-    const message =
-      err instanceof AuthError
-        ? `Stopped: ${TOKEN_REJECTED} ${zipMode ? keepIt : 'Progress so far is saved, and the report lists what was not exported.'}`
-        : err instanceof SinkFullError && keepsPartial
-          ? `${describeError(err)} ${keepIt}`
-          : describeError(err);
-    setStatus(ui.runStatus, isAbort(err) ? `Stopped. ${zipMode ? keepIt : 'Progress is saved.'}` : message, isAbort(err) ? 'warn' : 'error');
+    const kept = storeMode ? 'What was exported so far is kept in this browser.' : 'Progress so far is saved.';
+    const message = err instanceof AuthError ? `Stopped: ${TOKEN_REJECTED} ${kept} The report lists what was not exported.` : describeError(err);
+    setStatus(ui.runStatus, isAbort(err) ? `Stopped. ${kept}` : message, isAbort(err) ? 'warn' : 'error');
     log(describeError(err), 'error');
     return isAbort(err) ? 'stopped' : err instanceof AuthError ? 'idle' : 'error';
   } finally {
@@ -789,6 +949,7 @@ async function run(): Promise<void> {
       return true;
     });
     if (!started) setStatus(ui.runStatus, 'Another exporter tab is already exporting. Wait for it to finish or close it, then start again.', 'warn');
+    await readStore();
     // Last, with nothing asynchronous after it: the page never shows "done" while a click would still be ignored.
     setPhase(final);
   });
@@ -796,8 +957,8 @@ async function run(): Promise<void> {
 
 // ---- preview and saving a .zip -------------------------------------------
 
-/** Hands a file to the browser's downloads. Used for the preview and for the .zip, always from a click. */
-function download(blob: Blob, name: string): void {
+/** Hands a file to the browser's downloads and returns the address it can be fetched from until `keepMs` have passed. */
+function download(blob: Blob, name: string, keepMs = 60_000): string {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -806,8 +967,12 @@ function download(blob: Blob, name: string): void {
   document.body.append(link);
   link.click();
   link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  window.setTimeout(() => URL.revokeObjectURL(url), keepMs);
+  return url;
 }
+
+/** How long a built .zip stays available for "Save it again": long enough to retry, short enough not to hold a gigabyte for hours. */
+const ZIP_LINK_MS = 10 * 60_000;
 
 /** What the converter notes about a document, in words. Anything not listed shows as its code. */
 const NOTE_TEXT: Record<string, string> = {
@@ -888,25 +1053,16 @@ function downloadPreview(): void {
   download(new Blob([ui.previewText.value], { type: 'text/markdown' }), name);
 }
 
-/** Switches between saving to a folder and saving to a .zip. Whatever was scanned belongs to the other choice. */
-function setOutput(zip: boolean): void {
-  zipMode = zip;
+/** Switches between saving to a folder and keeping the export in the browser. Whatever was scanned belongs to the other choice. */
+async function setOutput(inBrowser: boolean): Promise<void> {
+  storeMode = inBrowser;
   epoch += 1;
   session = undefined;
-  zipSink = undefined;
+  confirmingClear = false;
   hidePlan();
   refresh();
   void saveSettings();
-}
-
-async function saveZip(): Promise<void> {
-  if (!zipSink) return;
-  try {
-    download(await zipSink.toBlob(), `quipendo-export-${new Date().toISOString().slice(0, 10)}.zip`);
-    setStatus(ui.runStatus, 'The .zip was sent to your browser to save.', 'ok');
-  } catch (err) {
-    setStatus(ui.runStatus, describeError(err), 'error');
-  }
+  await readStore();
 }
 
 // ---- start-up ------------------------------------------------------------
@@ -922,20 +1078,55 @@ function applySettings(s: Settings): void {
   ui.skip.checked = s.skipUnchanged;
   ui.unfiled.checked = s.includeUnfiled;
   ui.max.value = s.maxDocs;
-  zipMode = s.output === 'zip';
-  ui.outZip.checked = zipMode;
-  ui.outFolder.checked = !zipMode;
+  // A browser that cannot write into a folder keeps the export in itself, whatever was saved.
+  storeMode = s.output === 'store' || !CAN_PICK_FOLDER;
+  ui.outStore.checked = storeMode;
+  ui.outFolder.checked = !storeMode;
+}
+
+/** Brings this page's tab and window to the front, for when the toolbar button is pressed while it is open somewhere else. */
+async function bringForward(): Promise<void> {
+  try {
+    const tab = await ext.tabs.getCurrent();
+    if (tab?.id !== undefined) await ext.tabs.update(tab.id, { active: true });
+    if (tab?.windowId !== undefined) await ext.windows.update(tab.windowId, { focused: true });
+  } catch {
+    // Best effort: a browser that will not switch tabs for an extension leaves the page where it is.
+  }
+}
+
+/** The toolbar button asks whether an exporter page is open; this one answers, and takes the Quip page it was pressed on. */
+function listenForToolbarButton(): void {
+  ext.runtime.onMessage.addListener((msg: { type?: string; url?: string } | undefined, _sender, sendResponse) => {
+    if (msg?.type !== 'quip-source-url') return;
+    // Answered at once, so the button knows this page is open and does not open another one.
+    sendResponse({ handled: true });
+    void bringForward();
+    const url = msg.url;
+    if (!url) return;
+    if (working) {
+      pendingFrom = url;
+      log('Another Quip page was selected. It will be offered when the current task finishes.', 'warn');
+      return;
+    }
+    void exclusive(() => selectPage(url));
+  });
 }
 
 async function init(): Promise<void> {
-  ui.version.textContent = chrome.runtime.getManifest().version;
+  listenForToolbarButton();
+  ui.version.textContent = ext.runtime.getManifest().version;
   const guard = await installReadOnlyGuard();
   ui.guard.textContent = guard.active ? 'Browser-level read-only guard: on' : `Browser-level read-only guard: unavailable (${guard.detail})`;
   ui.guard.dataset.tone = guard.active ? 'ok' : 'warn';
 
   applySettings(await loadSettings());
-  await restoreTarget();
-  if (__E2E__ && E2E) (await import('./e2eHooks')).installTestHooks(() => target, useTarget);
+  if (CAN_PICK_FOLDER) await restoreTarget();
+  hostAccess = await hasHostAccess(BASE_URL);
+  showAccessNotice();
+  // Whatever an earlier visit kept is shown at once, so a run that was cut short can be saved or continued.
+  await readStore();
+  if (__E2E__ && E2E) (await import('./e2eHooks')).installTestHooks({ target: () => target, store: () => (storeMode ? store : undefined), useTarget });
 
   ui.connect.addEventListener('click', () => void connect());
   ui.forget.addEventListener('click', () => void forgetToken());
@@ -948,8 +1139,16 @@ async function init(): Promise<void> {
   ui.previewUrl.addEventListener('keydown', (e) => e.key === 'Enter' && void preview());
   ui.copy.addEventListener('click', () => void copyPreview());
   ui.downloadMd.addEventListener('click', downloadPreview);
-  ui.zip.addEventListener('click', () => void saveZip());
-  for (const el of [ui.outFolder, ui.outZip]) el.addEventListener('change', () => setOutput(ui.outZip.checked));
+  for (const el of [ui.outFolder, ui.outStore]) el.addEventListener('change', () => void setOutput(ui.outStore.checked));
+  ui.clear.addEventListener('click', () => {
+    confirmingClear = true;
+    refresh();
+  });
+  ui.clearNo.addEventListener('click', () => {
+    confirmingClear = false;
+    refresh();
+  });
+  ui.clearYes.addEventListener('click', () => void clearStore());
   ui.treeFilter.addEventListener('input', () => tree?.setFilter(ui.treeFilter.value));
   ui.treeAll.addEventListener('click', () => tree?.tickShown(true));
   ui.treeNone.addEventListener('click', () => tree?.tickShown(false));
@@ -962,22 +1161,12 @@ async function init(): Promise<void> {
   });
   ui.remember.addEventListener('change', () => {
     // Unticking must take effect now, not at the next connect.
-    if (!ui.remember.checked) void chrome.storage.local.remove('token');
-    else if (conn) void chrome.storage.local.set({ token: conn.token });
+    if (!ui.remember.checked) void ext.storage.local.remove('token');
+    else if (conn) void ext.storage.local.set({ token: conn.token });
     void saveSettings();
   });
   window.addEventListener('beforeunload', (e) => {
     if (phase === 'running') e.preventDefault();
-  });
-  chrome.runtime.onMessage.addListener((msg: { type?: string; url?: string }) => {
-    if (msg.type !== 'quip-source-url' || !msg.url) return;
-    const url = msg.url;
-    if (working) {
-      pendingFrom = url;
-      log('Another Quip page was selected. It will be offered when the current task finishes.', 'warn');
-      return;
-    }
-    void exclusive(() => selectPage(url));
   });
   window.setInterval(() => {
     const left = throttleUntil - Date.now();
