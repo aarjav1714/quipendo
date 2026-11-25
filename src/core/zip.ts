@@ -63,7 +63,8 @@ export interface ZipItem {
   /**
    * What to store; nothing for a folder. A Blob is stored as it is, so a large file is never read into memory.
    * Bytes of a text file are compressed when that makes them smaller. A function is called when the entry is
-   * written, so a part of a big export only holds the entry being written.
+   * written, so a file is only read when its turn comes. The bytes of text entries (compressed where that helps)
+   * are held in memory until the whole archive is built; Blobs are not.
    */
   data?: Uint8Array | Blob | (() => Promise<Uint8Array | Blob>);
 }
@@ -121,6 +122,8 @@ export async function zipBlob(items: ZipItem[], when: Date = new Date()): Promis
     const dir = item.name.endsWith('/');
     const name = encoder.encode(item.name);
     const data = typeof item.data === 'function' ? await item.data() : item.data;
+    // The headers say how big the entry is: the content must really be that big, or every offset after it would be wrong.
+    if (!dir && data !== undefined && (data instanceof Blob ? data.size : data.length) !== item.size) throw new Error(`${item.name} is not the size it was listed with, so it cannot be put in the .zip.`);
     let method = 0;
     let payload: Uint8Array | Blob = data ?? new Uint8Array(0);
     let payloadSize = item.size;

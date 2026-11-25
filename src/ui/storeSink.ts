@@ -35,6 +35,8 @@ export interface StoreBackend {
   put(meta: StoredMeta, data: StoredData): Promise<void>;
   getMeta(path: string): Promise<StoredMeta | undefined>;
   getData(path: string): Promise<StoredData | undefined>;
+  /** A file's description and content as they were at one moment: another tab may rewrite the file between two separate reads. */
+  getBoth(path: string): Promise<{ meta: StoredMeta; data: StoredData } | undefined>;
   allMeta(): Promise<StoredMeta[]>;
   putDir(path: string): Promise<void>;
   allDirs(): Promise<string[]>;
@@ -42,7 +44,11 @@ export interface StoreBackend {
   close(): void;
 }
 
-const isQuota = (err: unknown): boolean => err instanceof DOMException && (err.name === 'QuotaExceededError' || err.code === 22);
+/** The browser says it is out of room with a QuotaExceededError, on a request or on the transaction that failed with it. */
+const isQuota = (err: unknown): boolean => {
+  const e = err as { name?: unknown; code?: unknown } | null;
+  return e !== null && typeof e === 'object' && (e.name === 'QuotaExceededError' || e.code === 22);
+};
 
 const FULL = 'The browser has no room left to keep the export. Save what is stored as a .zip, then clear it and carry on with the rest.';
 
@@ -63,6 +69,11 @@ export class MemoryBackend implements StoreBackend {
   }
   getData(path: string): Promise<StoredData | undefined> {
     return Promise.resolve(this.datas.get(path));
+  }
+  getBoth(path: string): Promise<{ meta: StoredMeta; data: StoredData } | undefined> {
+    const meta = this.metas.get(path);
+    const data = this.datas.get(path);
+    return Promise.resolve(meta !== undefined && data !== undefined ? { meta, data } : undefined);
   }
   allMeta(): Promise<StoredMeta[]> {
     return Promise.resolve([...this.metas.values()]);
@@ -87,25 +98,58 @@ const META = 'meta';
 const DATA = 'data';
 const DIRS = 'dirs';
 
+/** Content read back as it is used elsewhere: a Blob, or text. Bytes kept as plain data (see `keepsBlobs`) become a Blob again. */
+const asData = (value: StoredData | ArrayBuffer | undefined): StoredData | undefined => (value instanceof ArrayBuffer ? new Blob([value]) : value);
+
 const asPromise = <T>(request: IDBRequest<T>): Promise<T> =>
   new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
 
-const finished = (tx: IDBTransaction): Promise<void> =>
+/**
+ * Settles when the transaction has committed or aborted. A request that fails raises its error on the request, and the
+ * transaction's own `error` stays null until it aborts (and in some browsers after that, too), so the request's error is
+ * kept to say what went wrong; the abort that always follows is what rejects.
+ */
+export const transactionDone = (tx: IDBTransaction): Promise<void> =>
   new Promise((resolve, reject) => {
+    let cause: unknown;
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error ?? new DOMException('The transaction was aborted', 'AbortError'));
+    tx.onerror = (event) => {
+      cause ??= (event.target as IDBRequest | null)?.error ?? undefined;
+    };
+    tx.onabort = () => reject(cause ?? tx.error ?? new DOMException("The browser stopped saving to the extension's storage", 'AbortError'));
   });
+
+/** A key no file path can have, for finding out whether a Blob can be kept. */
+const PROBE_KEY = -1;
+
+/**
+ * Whether this browser can keep a Blob in IndexedDB. A private or temporary session of WebKit cannot (the write fails
+ * without saying why), and a browser that cannot gets the same bytes as plain data instead.
+ */
+async function keepsBlobs(db: IDBDatabase): Promise<boolean> {
+  try {
+    const tx = db.transaction(DATA, 'readwrite');
+    tx.objectStore(DATA).put(new Blob([new Uint8Array([1])]), PROBE_KEY);
+    tx.objectStore(DATA).delete(PROBE_KEY);
+    await transactionDone(tx);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** Keeps the files in IndexedDB: on disk, surviving a closed tab, and not limited by memory. */
 export class IdbBackend implements StoreBackend {
-  private constructor(private readonly db: IDBDatabase) {}
+  private constructor(
+    private readonly db: IDBDatabase,
+    private readonly blobs: boolean,
+  ) {}
 
-  static open(name: string): Promise<IdbBackend> {
-    return new Promise((resolve, reject) => {
+  static async open(name: string): Promise<IdbBackend> {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open(name, 1);
       request.onupgradeneeded = () => {
         const db = request.result;
@@ -117,24 +161,32 @@ export class IdbBackend implements StoreBackend {
         const db = request.result;
         // Another tab deleting or upgrading the database must not be held up by this one.
         db.onversionchange = () => db.close();
-        resolve(new IdbBackend(db));
+        resolve(db);
       };
       request.onerror = () => reject(request.error);
       request.onblocked = () => reject(new Error('The stored export is in use by an older version of this page. Close the other Quipendo tabs and try again.'));
     });
+    return new IdbBackend(db, await keepsBlobs(db));
   }
 
   async put(meta: StoredMeta, data: StoredData): Promise<void> {
+    // Read before the transaction starts: a transaction ends when nothing is waiting on it.
+    const value = data instanceof Blob && !this.blobs ? await data.arrayBuffer() : data;
     const tx = this.db.transaction([META, DATA], 'readwrite');
     tx.objectStore(META).put(meta);
-    tx.objectStore(DATA).put(data, meta.path);
-    await finished(tx);
+    tx.objectStore(DATA).put(value, meta.path);
+    await transactionDone(tx);
   }
   getMeta(path: string): Promise<StoredMeta | undefined> {
     return asPromise(this.db.transaction(META).objectStore(META).get(path) as IDBRequest<StoredMeta | undefined>);
   }
-  getData(path: string): Promise<StoredData | undefined> {
-    return asPromise(this.db.transaction(DATA).objectStore(DATA).get(path) as IDBRequest<StoredData | undefined>);
+  async getData(path: string): Promise<StoredData | undefined> {
+    return asData(await asPromise(this.db.transaction(DATA).objectStore(DATA).get(path) as IDBRequest<StoredData | ArrayBuffer | undefined>));
+  }
+  async getBoth(path: string): Promise<{ meta: StoredMeta; data: StoredData } | undefined> {
+    const tx = this.db.transaction([META, DATA]);
+    const [meta, data] = await Promise.all([asPromise(tx.objectStore(META).get(path) as IDBRequest<StoredMeta | undefined>), asPromise(tx.objectStore(DATA).get(path) as IDBRequest<StoredData | ArrayBuffer | undefined>)]);
+    return meta !== undefined && data !== undefined ? { meta, data: asData(data) as StoredData } : undefined;
   }
   allMeta(): Promise<StoredMeta[]> {
     return asPromise(this.db.transaction(META).objectStore(META).getAll() as IDBRequest<StoredMeta[]>);
@@ -142,7 +194,7 @@ export class IdbBackend implements StoreBackend {
   async putDir(path: string): Promise<void> {
     const tx = this.db.transaction(DIRS, 'readwrite');
     tx.objectStore(DIRS).put({ path });
-    await finished(tx);
+    await transactionDone(tx);
   }
   async allDirs(): Promise<string[]> {
     const rows = await asPromise(this.db.transaction(DIRS).objectStore(DIRS).getAll() as IDBRequest<Array<{ path: string }>>);
@@ -151,7 +203,7 @@ export class IdbBackend implements StoreBackend {
   async clear(): Promise<void> {
     const tx = this.db.transaction([META, DATA, DIRS], 'readwrite');
     for (const name of [META, DATA, DIRS]) tx.objectStore(name).clear();
-    await finished(tx);
+    await transactionDone(tx);
   }
   close(): void {
     this.db.close();
@@ -211,13 +263,13 @@ export class StoreSink implements Sink {
     this.bytes += bytes.length - previous;
   }
 
-  /** A browser that is out of room says so in its own words; the export stops with ours. */
+  /** A browser that is out of room says so in its own words; the export stops with ours. Anything else is made an Error, so it can be told what it was. */
   private async guarded(work: () => Promise<void>): Promise<void> {
     try {
       await work();
     } catch (err) {
       if (isQuota(err)) throw new SinkFullError(FULL);
-      throw err;
+      throw err instanceof Error ? err : new Error(`The browser could not keep the file${err === null || err === undefined ? '' : `: ${String(err)}`}.`);
     }
   }
 
@@ -283,9 +335,12 @@ export class StoreSink implements Sink {
       size: m.size,
       crc: m.crc,
       data: async () => {
-        const data = await this.backend.getData(m.path);
-        if (data === undefined) throw new Error(`${m.path} is no longer stored.`);
-        return typeof data === 'string' ? encoder.encode(data) : data;
+        const stored = await this.backend.getBoth(m.path);
+        if (!stored) throw new Error(`${m.path} is no longer stored. Try again.`);
+        // The sizes and checksums in the .zip's headers come from when the parts were listed. A file that another tab wrote
+        // since must not slip in under them, or the .zip would be corrupt and still be reported as saved.
+        if (stored.meta.size !== m.size || stored.meta.crc !== m.crc) throw new Error(`${m.path} changed while the .zip was being built. Try again.`);
+        return typeof stored.data === 'string' ? encoder.encode(stored.data) : stored.data;
       },
     }));
     const groups = partitionZip(zipItems(files, await this.backend.allDirs()), budget);

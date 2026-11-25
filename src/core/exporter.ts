@@ -752,7 +752,7 @@ export class Exporter {
           break;
         }
         counts.failed += 1;
-        const stage = (err as { stage?: string }).stage ?? 'export';
+        const stage = (err instanceof Error ? (err as { stage?: string }).stage : undefined) ?? 'export';
         this.failures.push({ id: thread.meta.id, title: base.title, stage, message: errMessage(err) });
         this.emit({ type: 'doc', ...base, status: 'failed', message: errMessage(err) });
       }
@@ -962,7 +962,7 @@ export class Exporter {
         this.editHistorySaved += 1;
         if (history.incomplete) warnings.push({ code: 'edit-history-incomplete', detail: 'more edits share one timestamp than Quip lets the tool list' });
       } catch (err) {
-        if (err instanceof AuthError || isAbortError(err) || this.deps.signal?.aborted) throw err;
+        if (err instanceof AuthError || err instanceof SinkFullError || isAbortError(err) || this.deps.signal?.aborted) throw err;
         warnings.push({ code: 'edit-history-failed', detail: err instanceof QuipHttpError ? `HTTP ${err.status}` : errMessage(err) });
         if (isRetryable(err)) flags.retry = true;
       }
@@ -1137,7 +1137,7 @@ export class Exporter {
         flags.sidecars.add(t.pdfPath);
         pdfLink = `[Open the PDF copy](${relativeLink(t.path, t.pdfPath)})`;
       } catch (err) {
-        if (err instanceof AuthError || isAbortError(err)) throw err;
+        if (err instanceof AuthError || err instanceof SinkFullError || isAbortError(err)) throw err;
         warnings.push({ code: 'slides-pdf-failed', detail: err instanceof QuipHttpError ? `HTTP ${err.status}` : errMessage(err) });
         if (isRetryable(err)) flags.retry = true;
       }
@@ -1161,7 +1161,7 @@ export class Exporter {
       flags.sidecars.add(path);
       return `> Original spreadsheet with its formulas: [${escapeInline(`${title}.xlsx`)}](${relativeLink(t.path, path)})`;
     } catch (err) {
-      if (err instanceof AuthError || isAbortError(err) || this.deps.signal?.aborted) throw err;
+      if (err instanceof AuthError || err instanceof SinkFullError || isAbortError(err) || this.deps.signal?.aborted) throw err;
       warnings.push({ code: 'xlsx-failed', detail: err instanceof QuipHttpError ? `HTTP ${err.status}` : errMessage(err) });
       if (isRetryable(err)) flags.retry = true;
       return '';
@@ -1181,7 +1181,7 @@ export class Exporter {
       flags.sidecars.add(path);
       return `> Word copy as Quip exports it (without comments): [${escapeInline(`${title}.docx`)}](${relativeLink(t.path, path)})`;
     } catch (err) {
-      if (err instanceof AuthError || isAbortError(err) || this.deps.signal?.aborted) throw err;
+      if (err instanceof AuthError || err instanceof SinkFullError || isAbortError(err) || this.deps.signal?.aborted) throw err;
       warnings.push({ code: 'docx-failed', detail: err instanceof QuipHttpError ? `HTTP ${err.status}` : errMessage(err) });
       if (isRetryable(err)) flags.retry = true;
       return '';
@@ -1247,7 +1247,7 @@ export class Exporter {
       flags.files.add(path);
       return path;
     } catch (err) {
-      if (err instanceof AuthError || isAbortError(err) || this.deps.signal?.aborted) throw err;
+      if (err instanceof AuthError || err instanceof SinkFullError || isAbortError(err) || this.deps.signal?.aborted) throw err;
       this.blobPaths.set(key, null);
       this.blobFailures.set(key, { detail: err instanceof QuipHttpError ? `HTTP ${err.status}` : errMessage(err), retry: isRetryable(err) });
       this.attachments.missing += 1;

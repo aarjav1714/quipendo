@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { SinkFullError } from '../../src/core/sink';
 import { crc32 } from '../../src/core/zip';
-import { MemoryBackend, StoreSink, zipFileName, type StoredData, type StoredMeta, type StoreBackend } from '../../src/ui/storeSink';
+import { IdbBackend, MemoryBackend, StoreSink, transactionDone, zipFileName, type StoredData, type StoredMeta, type StoreBackend } from '../../src/ui/storeSink';
 import { readZip } from '../helpers/unzip';
 
 let counter = 0;
@@ -142,6 +142,95 @@ describe('a store whose browser is out of room', () => {
     const store = await StoreSink.open(new Full());
     await expect(store.writeFile('a.md', 'x')).rejects.toThrow(SinkFullError);
     await expect(store.writeFile('a.md', 'x')).rejects.toThrow(/Save what is stored as a \.zip, then clear it/);
+  });
+});
+
+describe('a store whose browser fails in other ways', () => {
+  const failing = (reason: unknown): StoreBackend =>
+    new (class extends MemoryBackend {
+      override put(): Promise<void> {
+        return Promise.reject(reason);
+      }
+    })();
+
+  it('says what happened instead of passing on nothing: a rejection with null, as WebKit gives, becomes an Error', async () => {
+    const store = await StoreSink.open(failing(null));
+    const failure = await store.writeFile('a.md', 'x').then(
+      () => undefined,
+      (err: unknown) => err,
+    );
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toMatch(/could not keep the file/);
+  });
+
+  it('still recognises "no room" when the error is not a DOMException of this page, as in another realm or a polyfill', async () => {
+    const store = await StoreSink.open(failing({ name: 'QuotaExceededError', message: 'full' }));
+    await expect(store.writeFile('a.md', 'x')).rejects.toThrow(SinkFullError);
+  });
+
+  it('keeps the request\'s own error when a transaction fails, because the transaction itself has none to give', async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(`test-tx-${(counter += 1)}`, 1);
+      request.onupgradeneeded = () => request.result.createObjectStore('s');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const tx = db.transaction('s', 'readwrite');
+    tx.objectStore('s').add(1, 'k');
+    tx.objectStore('s').add(2, 'k'); // the same key again: this request fails
+    const failure = await transactionDone(tx).then(
+      () => undefined,
+      (err: unknown) => err,
+    );
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).name).toBe('ConstraintError');
+    db.close();
+  });
+});
+
+describe('a browser that cannot keep a Blob in its storage (a private or temporary WebKit session)', () => {
+  it('keeps the same bytes as plain data and reads them back as a file', async () => {
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (this: IDBObjectStore, value: unknown, key?: IDBValidKey): IDBRequest {
+      if (value instanceof Blob) throw new DOMException('Blobs cannot be kept here', 'DataCloneError');
+      return put.call(this, value, key);
+    };
+    try {
+      const backend = await IdbBackend.open(`test-noblob-${(counter += 1)}`);
+      const store = await StoreSink.open(backend);
+      const bytes = Uint8Array.from([137, 80, 78, 71, 0, 255, 7]);
+      await store.writeFile('_attachments/t1/pic.png', bytes);
+      await store.writeFile('Notes.md', '# Notes');
+      expect(Array.from((await store.readBytes('_attachments/t1/pic.png')) ?? [])).toEqual(Array.from(bytes));
+      const zip = readZip(new Uint8Array(await (await (await store.zipParts())[0]!.build()).arrayBuffer()));
+      expect(Array.from(zip['_attachments/t1/pic.png']?.data ?? [])).toEqual(Array.from(bytes));
+      store.close();
+    } finally {
+      IDBObjectStore.prototype.put = put;
+    }
+  });
+});
+
+describe('saving a .zip while the store changes', () => {
+  it.each([
+    ['a different length', '{"version":2,"more":true}'],
+    ['the same length', '{"version":3}'],
+  ])('refuses a file another tab rewrote with %s since the parts were listed, instead of making a corrupt .zip', async (_label, rewritten) => {
+    const store = await StoreSink.open(new MemoryBackend());
+    await store.writeFile('state.json', '{"version":2}');
+    await store.writeFile('Notes.md', '# Notes');
+    const [part] = await store.zipParts();
+    await store.writeFile('state.json', rewritten);
+    await expect(part!.build()).rejects.toThrow(/state\.json changed while the \.zip was being built\. Try again\./);
+  });
+
+  it('refuses a file that was removed meanwhile', async () => {
+    const backend = new MemoryBackend();
+    const store = await StoreSink.open(backend);
+    await store.writeFile('Notes.md', '# Notes');
+    const [part] = await store.zipParts();
+    await backend.clear();
+    await expect(part!.build()).rejects.toThrow(/no longer stored/);
   });
 });
 

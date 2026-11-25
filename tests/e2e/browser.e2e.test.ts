@@ -452,7 +452,7 @@ describe(`the extension in ${driver.name}`, () => {
       await state(first, 'running');
 
       await second.click('#btn-run');
-      await expect.poll(() => second.textContent('#run-status'), { timeout: 10_000 }).toContain('Another exporter tab is already exporting');
+      await expect.poll(() => second.textContent('#run-status'), { timeout: 10_000 }).toContain('Another exporter tab is exporting, saving or clearing this export');
       expect(await second.getAttribute('body', 'data-state')).toBe('connected'); // still usable, just not running
       expect(await second.isDisabled('#btn-run')).toBe(false);
       // With a folder each tab has its own, so the second has written nothing; the browser's storage is one for all tabs.
@@ -514,6 +514,43 @@ describe(`the extension in ${driver.name}`, () => {
     await expect(page.isVisible('#access-notice')).resolves.toBe(false);
     await expect(page.textContent('#connect-status')).resolves.toContain('Connected as Jane Doe');
     await page.close();
+  });
+
+  it('will not clear the stored export, or build a .zip from it, while another tab is exporting into it', async () => {
+    const slow = await startMockQuip({ delayMs: 60 });
+    const first = await openExporter({ base: slow.url });
+    let second: E2EPage | undefined;
+    try {
+      await first.check('#out-store');
+      await connect(first);
+      await first.click('#btn-run');
+      await state(first, 'running');
+      // The second tab opens when something is already stored, so it offers to save and to clear it.
+      await expect.poll(async () => Object.keys(await readTree(first)).filter((p) => p.endsWith('.md')).length, { timeout: 30_000 }).toBeGreaterThan(1);
+      second = await openExporter({ base: slow.url });
+      await second.check('#out-store');
+      await expect.poll(() => second?.isVisible('.zip-part'), { timeout: 15_000 }).toBe(true);
+
+      const busy = 'Another exporter tab is exporting, saving or clearing this export';
+      await second.click('#btn-clear');
+      await second.click('#btn-clear-yes');
+      await expect.poll(() => second?.textContent('#run-status'), { timeout: 10_000 }).toContain(busy);
+      await second.evaluate(() => (document.querySelector('.zip-part') as HTMLElement).click());
+      await expect.poll(() => second?.textContent('#run-status'), { timeout: 10_000 }).toContain(busy);
+
+      // Nothing was lost: the first tab finishes, and everything is there.
+      await state(first, 'done', 120_000);
+      await expect(first.textContent('#run-status')).resolves.toMatch(/Done\. 9 saved/);
+      expect(Object.keys(await readTree(first)).filter((p) => p.endsWith('.md') && !p.startsWith('_Quip') && p !== '_Index.md')).toHaveLength(9);
+
+      // Once nobody is using it, it can be cleared from the other tab.
+      await second.click('#btn-clear');
+      await second.click('#btn-clear-yes');
+      await expect.poll(() => second?.textContent('#store-info'), { timeout: 10_000 }).toBe('Nothing is kept yet.');
+    } finally {
+      await Promise.all([first.close(), second?.close()]);
+      await slow.close();
+    }
   });
 
   it('says why the page you came from cannot be offered, instead of silently showing all folders', async () => {

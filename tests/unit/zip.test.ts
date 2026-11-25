@@ -17,6 +17,13 @@ describe('crc32', () => {
 });
 
 describe('zipBlob', () => {
+  it('refuses content that is not the size the entry was listed with, since every offset after it would be wrong', async () => {
+    const entry = (data: Uint8Array | Blob, size: number): ZipItem => ({ name: 'a.bin', size, crc: 0, data });
+    await expect(zipBlob([entry(new Uint8Array(4), 5)], WHEN)).rejects.toThrow(/a\.bin is not the size it was listed with/);
+    await expect(zipBlob([entry(new Blob([new Uint8Array(9)]), 8)], WHEN)).rejects.toThrow(/not the size it was listed with/);
+    await expect(zipBlob([{ name: 'b.bin', size: 3, crc: 0, data: () => Promise.resolve(new Uint8Array(2)) }], WHEN)).rejects.toThrow(/not the size it was listed with/);
+  });
+
   it('produces a standard archive: names, contents, checksums, empty folders and permissions', async () => {
     const long = `# Heading\n\n${'A line of text that compresses well. '.repeat(40)}\n`;
     const png = Uint8Array.from({ length: 300 }, (_, i) => (i * 37) % 251);

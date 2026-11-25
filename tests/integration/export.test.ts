@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ExportEvent, ExportOptions, ExportSummary } from '../../src/core/exporter';
 import { AuthError, READ_ONLY_ENDPOINTS } from '../../src/core/quipClient';
 import { createSession } from '../../src/core/session';
-import { MemoryBackend, StoreSink } from '../../src/ui/storeSink';
+import { MemoryBackend, StoreSink, type StoredData, type StoredMeta } from '../../src/ui/storeSink';
 import {
   ANN,
   B_FILE,
@@ -747,6 +747,28 @@ describe('an output that fills up', () => {
     await expect(exporter.run()).rejects.toThrow(/no room left to keep the export/);
     expect(requestsTo(/\/html$/)).toBeLessThan(9); // it did not go on asking for documents it could not keep
     expect((await sink.stats()).bytes).toBeLessThanOrEqual(12_000);
+  });
+
+  it('stops, too, when what cannot be kept is an attachment, a spreadsheet copy or a Word copy, which are the biggest writes', async () => {
+    for (const refused of [/^_attachments\//, /\.xlsx$/, /\.docx$/]) {
+      class RefusesBig extends MemoryBackend {
+        override put(meta: StoredMeta, data: StoredData): Promise<void> {
+          return refused.test(meta.path) ? Promise.reject(new DOMException('The quota has been exceeded.', 'QuotaExceededError')) : super.put(meta, data);
+        }
+      }
+      const sink = await StoreSink.open(new RefusesBig());
+      const { exporter } = createSession({
+        token: TOKEN,
+        baseUrl: ctx.mock.url,
+        sink,
+        parseHtml,
+        options: { rootIds: [F_PRIV], allRootIds: ALL_ROOTS, ownerId: ME.id, siteUrl: SITE, timeZone: 'UTC', saveDocx: true },
+        client: { minIntervalMs: 0, sleep: ctx.clock.sleep, now: ctx.clock.now },
+      });
+      // Not "attachment-missing" warnings and a report that says everything was done: the run ends, and says why.
+      await expect(exporter.run(), String(refused)).rejects.toThrow(/no room left to keep the export/);
+      expect(await sink.readText('_Quip export report.md'), String(refused)).toContain('Stopped');
+    }
   });
 
   it('is described in the report when the output can still take it', async () => {

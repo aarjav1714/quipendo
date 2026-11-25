@@ -184,6 +184,8 @@ let storeInMemory = false;
 let storeStats: StoreStats = { files: 0, bytes: 0 };
 let storeParts: ZipPart[] = [];
 let confirmingClear = false;
+/** A .zip is being built from the stored export; nothing else may touch it meanwhile. */
+let building = false;
 /** Whether the browser lets the extension contact Quip yet; undefined when it cannot say. */
 let hostAccess: boolean | undefined;
 /** The folder and document tree of the last scan, and what the user unticked in it. */
@@ -240,7 +242,7 @@ function setPhase(next: Phase): void {
 const hasDestination = (): boolean => storeMode || target !== undefined;
 
 function refresh(): void {
-  const busy = phase === 'loading' || phase === 'connecting' || phase === 'scanning' || phase === 'running' || phase === 'previewing';
+  const busy = phase === 'loading' || phase === 'connecting' || phase === 'scanning' || phase === 'running' || phase === 'previewing' || building;
   ui.connect.disabled = busy;
   ui.forget.disabled = busy;
   ui.token.disabled = busy;
@@ -445,11 +447,16 @@ async function readStore(): Promise<void> {
 /** Builds one .zip of the stored export and hands it to the browser, which saves it. */
 async function saveZip(part: ZipPart): Promise<void> {
   const name = zipFileName(part);
-  const buttons = [...ui.zipParts.querySelectorAll('button')];
-  for (const button of buttons) button.disabled = true;
+  building = true;
+  refresh();
   setStatus(ui.runStatus, `Building ${name}…`);
   try {
-    const blob = await part.build();
+    // Shared: several tabs may read the store at once, but not while one of them is exporting or clearing it.
+    const blob = await navigator.locks.request(RUN_LOCK, { mode: 'shared', ifAvailable: true }, async (lock) => (lock ? part.build() : undefined));
+    if (!blob) {
+      setStatus(ui.runStatus, BUSY_ELSEWHERE, 'warn');
+      return;
+    }
     const url = download(blob, name, ZIP_LINK_MS);
     setStatus(ui.runStatus, `${name} (${formatBytes(blob.size)}) was sent to your browser to save.`, 'ok');
     // A browser that wants a click on the file itself, not on a button that had to build it first, gets that here.
@@ -461,19 +468,32 @@ async function saveZip(part: ZipPart): Promise<void> {
     window.setTimeout(() => link.remove(), ZIP_LINK_MS);
   } catch (err) {
     setStatus(ui.runStatus, `Could not build ${name}: ${describeError(err)}`, 'error');
+    // What is stored may have changed in another tab, so the buttons offered may no longer fit it.
+    await readStore();
   } finally {
-    for (const button of buttons) button.disabled = phase === 'running';
+    building = false;
+    refresh();
   }
 }
 
 async function clearStore(): Promise<void> {
   await exclusive(async () => {
     try {
-      await (await openStore()).clear();
+      // Alone: another tab may be exporting into the store, or saving it as a .zip.
+      const cleared = await navigator.locks.request(RUN_LOCK, { ifAvailable: true }, async (lock) => {
+        if (!lock) return false;
+        await (await openStore()).clear();
+        return true;
+      });
+      confirmingClear = false;
+      if (!cleared) {
+        await readStore();
+        setStatus(ui.runStatus, BUSY_ELSEWHERE, 'warn');
+        return;
+      }
       epoch += 1;
       session = undefined;
       hidePlan();
-      confirmingClear = false;
       await readStore();
       setStatus(ui.runStatus, 'The copy kept in this browser was cleared. The next export starts from nothing.', 'ok');
     } catch (err) {
@@ -891,8 +911,12 @@ function summarize(s: ExportSummary): string {
   return `${parts.join(', ')} of ${s.docs.planned} documents. The report is ${s.reportPath} ${storeMode ? 'in the copy kept in this browser' : 'in the target folder'}.`;
 }
 
-/** Held by the one exporter tab that is writing, so two tabs can never pick the same file name for different documents. */
+/**
+ * Held by the one exporter tab that is writing, so two tabs can never pick the same file name for different documents.
+ * A tab that builds a .zip, which reads what is stored, holds it shared; a tab that clears the store holds it alone, as a run does.
+ */
 const RUN_LOCK = 'quipendo-run';
+const BUSY_ELSEWHERE = 'Another exporter tab is exporting, saving or clearing this export. Wait for it to finish or close it, then try again.';
 
 /** Runs one export and says which phase to end in. The caller applies it last, once nothing is left to wait for. */
 async function runExport(): Promise<Phase> {
@@ -950,7 +974,7 @@ async function run(): Promise<void> {
       final = await runExport();
       return true;
     });
-    if (!started) setStatus(ui.runStatus, 'Another exporter tab is already exporting. Wait for it to finish or close it, then start again.', 'warn');
+    if (!started) setStatus(ui.runStatus, BUSY_ELSEWHERE, 'warn');
     await readStore();
     // Last, with nothing asynchronous after it: the page never shows "done" while a click would still be ignored.
     setPhase(final);
@@ -1170,6 +1194,12 @@ async function init(): Promise<void> {
   window.addEventListener('beforeunload', (e) => {
     if (phase === 'running') e.preventDefault();
   });
+  // Another tab may have exported into, or cleared, the store while this one was in the background.
+  const refreshStore = (): void => {
+    if (!document.hidden && !working && !building && phase !== 'running') void readStore();
+  };
+  window.addEventListener('focus', refreshStore);
+  document.addEventListener('visibilitychange', refreshStore);
   window.setInterval(() => {
     const left = throttleUntil - Date.now();
     if (left > 0 && (phase === 'running' || phase === 'scanning')) {

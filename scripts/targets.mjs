@@ -11,9 +11,9 @@ export const TARGETS = {
 export const GECKO_ID = 'quipendo@aarjav1714.github.io';
 /** Firefox 140 is the first release that reads data_collection_permissions, which new add-ons must declare. */
 export const GECKO_MIN_VERSION = '140.0';
-/** On Android that key arrived one release later. Android is not tested; this only keeps the declaration valid. */
+/** On Android that key arrived two releases later. Android is not tested; this only keeps the declaration valid. */
 export const GECKO_ANDROID_MIN_VERSION = '142.0';
-/** Safari 16.4 is the first release with every extension and web API the page uses (the browser-level guard needs 26). */
+/** Safari 16.4 is the first release with every extension and web API the page uses. Only Safari 27 has been tried. */
 export const SAFARI_MIN_VERSION = '16.4';
 
 export const targetNames = Object.keys(TARGETS);
@@ -24,9 +24,10 @@ export function parseTarget(name) {
 }
 
 /**
- * The manifest for one browser, made from extension/manifest.json (which is written for Chrome). The permissions, the
- * pages and the content security policy are the same everywhere; what differs is how the background script is
- * declared and the keys each browser wants or rejects.
+ * The manifest for one browser, made from extension/manifest.json (which is written for Chrome). The pages and the
+ * content security policy are the same everywhere, and so are the permissions except that Safari's build leaves out
+ * declarativeNetRequest; what else differs is how the background script is declared and the keys each browser wants
+ * or rejects.
  */
 export function manifestFor(target, base, { e2e = false } = {}) {
   const manifest = structuredClone(base);
