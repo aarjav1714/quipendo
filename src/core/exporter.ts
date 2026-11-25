@@ -7,7 +7,7 @@ import { PathAllocator, basename, dirname } from './naming';
 import { AuthError, QuipHttpError } from './quipClient';
 import type { OwnedThread, QuipApi, QuipMessage } from './quipTypes';
 import { attachmentExtension, rewriteSentinels, stripExtension } from './rewrite';
-import type { Sink } from './sink';
+import { SinkFullError, type Sink } from './sink';
 import { normalizeAnnotationId, type BlobRef, type FolderMeta, type ThreadMeta, type Warning } from './types';
 
 export const TOOL_NAME = 'Quipendo';
@@ -181,7 +181,7 @@ export interface WarningGroup {
   examples: string[];
 }
 
-export type StopReason = 'completed' | 'aborted' | 'auth-error';
+export type StopReason = 'completed' | 'aborted' | 'auth-error' | 'output-full';
 
 export interface ExportSummary {
   startedAt: string;
@@ -746,6 +746,11 @@ export class Exporter {
           stopReason = 'auth-error';
           break;
         }
+        if (err instanceof SinkFullError) {
+          fatal = err;
+          stopReason = 'output-full';
+          break;
+        }
         counts.failed += 1;
         const stage = (err as { stage?: string }).stage ?? 'export';
         this.failures.push({ id: thread.meta.id, title: base.title, stage, message: errMessage(err) });
@@ -785,10 +790,15 @@ export class Exporter {
       editHistorySaved: this.editHistorySaved,
     };
     this.emit({ type: 'phase', phase: 'finish', message: stopReason === 'completed' ? 'Writing the report…' : 'Stopped. Progress is saved; run again to continue.' });
-    await this.saveState();
-    await this.deps.sink.writeFile(REPORT_JSON_PATH, JSON.stringify(summary, null, 1));
-    await this.deps.sink.writeFile(reportPath, renderReport(summary, plan));
-    await this.writeIndexFiles(indexPath, indexJsonPath, finished);
+    try {
+      await this.saveState();
+      await this.deps.sink.writeFile(REPORT_JSON_PATH, JSON.stringify(summary, null, 1));
+      await this.deps.sink.writeFile(reportPath, renderReport(summary, plan));
+      await this.writeIndexFiles(indexPath, indexJsonPath, finished);
+    } catch (err) {
+      // A full output cannot take the report either; the error that stopped the run is the one to show.
+      if (!(fatal instanceof SinkFullError)) throw err;
+    }
     if (fatal) throw fatal;
     return summary;
   }
@@ -1347,11 +1357,13 @@ export function renderReport(summary: ExportSummary, plan: Plan): string {
   const status =
     summary.stopReason === 'auth-error'
       ? `Stopped: Quip rejected the access token (${summary.docs.notAttempted} documents were not exported; create a new token and run again)`
-      : summary.stopReason === 'aborted'
-        ? 'Stopped early (run again to continue)'
-        : summary.docs.failed > 0
-          ? 'Finished with problems'
-          : 'Finished';
+      : summary.stopReason === 'output-full'
+        ? 'Stopped: the output could not hold any more'
+        : summary.stopReason === 'aborted'
+          ? 'Stopped early (run again to continue)'
+          : summary.docs.failed > 0
+            ? 'Finished with problems'
+            : 'Finished';
   lines.push('# Quip export report', '', `- Status: ${status}`, `- Finished: ${summary.finishedAt}`, `- Tool: ${TOOL_NAME} ${TOOL_VERSION}`);
   lines.push(
     `- Documents: ${summary.docs.exported} exported, ${summary.docs.skipped} unchanged since the last run, ${summary.docs.failed} failed${summary.docs.notAttempted > 0 ? `, ${summary.docs.notAttempted} not attempted` : ''} (of ${summary.docs.planned})`,

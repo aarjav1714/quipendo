@@ -4,5 +4,5 @@ export { QuipClient, AuthError, QuipHttpError, ReadOnlyViolation, READ_ONLY_ENDP
 export type { QuipApi, CurrentUser } from './quipTypes';
 export { rootChoices, parseQuipUrl, quipIdFrom, type RootChoice } from './roots';
 export { createSession, type SessionConfig } from './session';
-export { MemorySink, splitSafePath, type Sink } from './sink';
+export { MemorySink, SinkFullError, splitSafePath, type Sink } from './sink';
 export { ZipSink, ZipTooLargeError, crc32 } from './zip';

@@ -11,6 +11,14 @@ export interface Sink {
   exists(path: string): Promise<boolean>;
 }
 
+/** The sink cannot take more. The export stops, since every file after this one would fail the same way. */
+export class SinkFullError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SinkFullError';
+  }
+}
+
 /** Splits a root-relative path and refuses anything that could escape the target directory. */
 export function splitSafePath(path: string): string[] {
   const parts = path.split('/');

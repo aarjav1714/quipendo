@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ExportEvent, ExportOptions, ExportSummary } from '../../src/core/exporter';
 import { AuthError, READ_ONLY_ENDPOINTS } from '../../src/core/quipClient';
 import { createSession } from '../../src/core/session';
+import { ZipSink } from '../../src/core/zip';
 import {
   ANN,
   B_FILE,
@@ -728,6 +729,38 @@ describe('previewing one document', () => {
     const summary = await exporter.run();
     expect(summary.attachments.saved).toBeGreaterThan(0);
     expect(await visible()).toContain('_attachments/PLANthread1/BLOBok00001.png');
+  });
+});
+
+describe('an output that fills up', () => {
+  it('stops at once with the sink\'s message, instead of failing every remaining document', async () => {
+    const sink = new ZipSink({ maxEntries: 6 });
+    const { exporter } = createSession({
+      token: TOKEN,
+      baseUrl: ctx.mock.url,
+      sink,
+      parseHtml,
+      options: { rootIds: [F_PRIV, F_DESK, F_SHARED], allRootIds: ALL_ROOTS, ownerId: ME.id, siteUrl: SITE, timeZone: 'UTC' },
+      client: { minIntervalMs: 0, sleep: ctx.clock.sleep, now: ctx.clock.now, messagePageSize: 2 },
+    });
+    await expect(exporter.run()).rejects.toThrow(/more than 6 files.*Save to a folder instead/);
+    expect(requestsTo(/\/html$/)).toBeLessThan(9); // it did not go on asking for documents it could not keep
+    expect(sink.size).toBeLessThanOrEqual(6);
+  });
+
+  it('is described in the report when the output can still take it', async () => {
+    const sink = new ZipSink({ maxBytes: 200_000 });
+    const { exporter } = createSession({
+      token: TOKEN,
+      baseUrl: ctx.mock.url,
+      sink,
+      parseHtml,
+      options: { rootIds: [F_PRIV], allRootIds: ALL_ROOTS, ownerId: ME.id, siteUrl: SITE, timeZone: 'UTC' },
+      client: { minIntervalMs: 0, sleep: ctx.clock.sleep, now: ctx.clock.now },
+    });
+    const summary = await exporter.run();
+    expect(summary.stopReason).toBe('completed');
+    expect(await sink.readText('_Quip export report.md')).toContain('- Status: Finished');
   });
 });
 

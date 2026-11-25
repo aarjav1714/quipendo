@@ -1,4 +1,4 @@
-import { splitSafePath, type Sink } from './sink';
+import { SinkFullError, splitSafePath, type Sink } from './sink';
 
 /** The most a page can reasonably hold in memory while it builds a .zip. */
 const DEFAULT_MAX_BYTES = 2 * 1024 ** 3;
@@ -7,7 +7,7 @@ const DEFAULT_MAX_ENTRIES = 0xfffe;
 const COMPRESSIBLE = /\.(md|html?|json|txt|csv|xml|svg)$/i;
 
 /** The export does not fit in one .zip file; a folder has no such limit. */
-export class ZipTooLargeError extends Error {
+export class ZipTooLargeError extends SinkFullError {
   constructor(message: string) {
     super(message);
     this.name = 'ZipTooLargeError';
