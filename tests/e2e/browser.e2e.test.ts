@@ -154,6 +154,14 @@ describe('the extension in a real Chromium', () => {
     const page = await openExporter();
     expect(await page.title()).toBe('Quipendo');
     await expect(page.evaluate(() => (document.querySelector('header img') as HTMLImageElement | null)?.naturalWidth ?? 0)).resolves.toBeGreaterThan(0);
+    // The heading is the wordmark picture, in the version that suits the page's colour scheme.
+    const wordmark = () => page.evaluate(() => ({ width: (document.querySelector('h1 img') as HTMLImageElement | null)?.naturalWidth ?? 0, src: (document.querySelector('h1 img') as HTMLImageElement | null)?.currentSrc ?? '' }));
+    await expect(page.getByRole('heading', { name: 'Quipendo' }).count()).resolves.toBe(1);
+    expect(await wordmark()).toMatchObject({ src: expect.stringMatching(/wordmark-on-light\.svg$/) });
+    expect((await wordmark()).width).toBeGreaterThan(0);
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect.poll(async () => (await wordmark()).src).toMatch(/wordmark-on-dark\.svg$/);
+    await expect.poll(async () => (await wordmark()).width).toBeGreaterThan(0);
     await expect(page.evaluate(() => chrome.runtime.getManifest().icons)).resolves.toMatchObject({ '16': 'icons/icon-16.png', '128': 'icons/icon-128.png' });
     await expect(page.textContent('#guard-status')).resolves.toContain('read-only guard: on');
     await expect(page.textContent('#target-name')).resolves.toBe('e2e-target');

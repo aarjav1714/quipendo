@@ -8,11 +8,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const logo = await readFile(`${root}assets/logo.svg`, 'utf8');
 
-// At toolbar sizes the fine detail (glow, sparkles, glint) turns to noise, so it is dropped, the strokes are
-// thickened and the spark is enlarged. The ids and classes below are the ones in assets/logo.svg.
+// At toolbar sizes the fine detail (bubbles, border, shadow) turns to noise, so it is dropped, the face is swapped for
+// a bolder one (a bigger eye and a thicker smile) and the fish is drawn a little larger. The classes and ids below are
+// the ones in assets/logo.svg.
 const SMALL_MAX = 32;
 const SMALL_STYLE =
-  '.fine{display:none}.mark{filter:none}#star{transform:translate(406px,338px) scale(1.45)}#ring{stroke-width:70px;r:108px}#tail{stroke-width:14px}';
+  '.fine{display:none}.mark{filter:none}.face-detail{display:none}.face-bold{display:inline}#art{transform:translate(250px,268px) scale(1.04) translate(-256px,-256px)}';
 const svgFor = (size) => (size <= SMALL_MAX ? logo.replace('</defs>', `</defs><style>${SMALL_STYLE}</style>`) : logo);
 const page_html = (svg, size) =>
   `<!doctype html><body style="margin:0;background:transparent"><img id="logo" width="${size}" height="${size}" style="display:block" src="data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}">`;

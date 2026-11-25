@@ -1,8 +1,13 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="Quipendo logo" width="128" height="128">
+  <img src="assets/logo.svg" alt="Quipendo logo: a smiling fish made from the letter Q" width="128" height="128">
 </p>
 
-<h1 align="center">Quipendo</h1>
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/wordmark-on-dark.svg">
+    <img src="assets/wordmark-on-light.svg" alt="Quipendo" height="56">
+  </picture>
+</h1>
 
 <p align="center"><em>A charm that turns your Quip folders into Markdown, before Quip goes away.</em></p>
 
@@ -207,10 +212,13 @@ None of these is a browser extension that mirrors a whole Quip folder tree as Ma
 npm test          # unit and mock-server integration tests
 npm run e2e       # builds a test variant and drives it in a real Chromium with Playwright
 npm run check     # typecheck, tests, production build, build verification
-npm run icons     # redraws the PNG icons, assets/logo-512.png and the social preview from assets/logo.svg
+npm run icons         # redraws the PNG icons, the store icon, assets/logo-512.png and the social preview from assets/logo.svg
+npm run store-assets  # remakes the Chrome Web Store tiles and screenshots in assets/store/
 ```
 
 The PNGs are committed, so a normal build needs neither `npm run icons` nor a browser. The social preview (`assets/social-preview.png`) is uploaded by hand in the repository settings.
+
+The artwork has two sources. `assets/logo.svg` is the logo: a Q that is also a smiling fish (the ring is the body, the Q's tail is the tail fin). `assets/wordmark-on-dark.svg` and `assets/wordmark-on-light.svg` draw the name as **QuipEnd!**, with the heavy dot of the exclamation mark standing in for the *o* of Quipendo; the letters are outlines of [Figtree](https://github.com/erikdkennedy/figtree) Black (SIL Open Font License 1.1), so nothing depends on an installed font. The name is still written *Quipendo* everywhere it is text (the package, the command, the store listing).
 
 - `src/core/` has no browser dependencies: `convert/` (HTML → Markdown), `quipClient.ts`, `exporter.ts`, `naming.ts`, `rewrite.ts`.
 - `src/ui/` is the exporter page (File System Access API, settings, progress); `src/background.ts` opens it.

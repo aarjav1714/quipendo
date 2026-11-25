@@ -37,5 +37,7 @@ if (e2e) {
 await writeFile(`${outdir}/manifest.json`, `${JSON.stringify(manifest, null, 2)}\n`);
 for (const file of ['exporter.html', 'exporter.css']) await copyFile(`${root}extension/${file}`, `${outdir}/${file}`);
 await cp(`${root}extension/icons`, `${outdir}/icons`, { recursive: true });
+// The page header shows the wordmark: one version for a light page and one for a dark page.
+for (const file of ['wordmark-on-light.svg', 'wordmark-on-dark.svg']) await copyFile(`${root}assets/${file}`, `${outdir}/${file}`);
 
 console.log(`Built ${e2e ? 'E2E ' : ''}extension into ${outdir}`);

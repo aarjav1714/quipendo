@@ -59,6 +59,19 @@ for (const [file, size] of icons) {
   else if (bytes.readUInt32BE(16) !== size || bytes.readUInt32BE(20) !== size) fail(`icon ${file} is ${bytes.readUInt32BE(16)}x${bytes.readUInt32BE(20)}, but the manifest says ${size}x${size}`);
 }
 
+// Everything the page points at must be in the package (a missing file is a broken page, not a build error), and the
+// images it shows must be plain pictures.
+const html = await readFile(`${dist}exporter.html`, 'utf8');
+const local = new Set();
+for (const [, , value] of html.matchAll(/\b(src|srcset|href)="([^"]+)"/g)) {
+  if (!/^(https?:|data:|#|mailto:)/i.test(value)) local.add(value.split(/\s+/)[0]);
+}
+for (const file of local) {
+  const bytes = await readFile(`${dist}${file}`).catch(() => undefined);
+  if (!bytes) fail(`exporter.html refers to ${file}, which is missing from the build`);
+  else if (file.endsWith('.svg') && /<script|<foreignObject|\son\w+=|(?:href|src)=["'](?!#)/i.test(bytes.toString('utf8'))) fail(`${file} contains something other than plain artwork`);
+}
+
 for (const file of ['exporter.js', 'background.js']) {
   const code = await readFile(`${dist}${file}`, 'utf8');
   for (const token of ['tryMutation', '__e2e', 'e2e-target', 'freshTestTarget', 'zipMax']) if (code.includes(token)) fail(`${file} contains test-only token "${token}"`);

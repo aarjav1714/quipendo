@@ -42,19 +42,12 @@
         flex-direction: column;
         justify-content: center;
       }
-      h1 {
-        margin: 0;
-        padding: 0 0.05em 0.09em 0;
+      .wordmark {
+        display: block;
         align-self: flex-start;
-        white-space: nowrap;
-        font-size: 120px;
-        line-height: 1;
-        font-weight: 800;
-        letter-spacing: -0.035em;
-        background: linear-gradient(180deg, #ffffff 35%, #d8c8ff 100%);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
+        width: 640px;
+        height: auto;
+        margin-left: -8px;
       }
       .tag {
         margin: 24px 0 0;
@@ -65,7 +58,7 @@
       }
       .tag b {
         font-weight: 700;
-        color: #fde68a;
+        color: #67e8f9;
       }
       .chips {
         display: flex;
@@ -94,7 +87,7 @@
     <svg id="stars" width="1280" height="640" viewBox="0 0 1280 640" aria-hidden="true"></svg>
     <img class="logo" src="logo.svg" alt="" />
     <div class="copy">
-      <h1>Quipendo</h1>
+      <img class="wordmark" src="wordmark-on-dark.svg" alt="Quipendo" />
       <p class="tag">A charm that turns your <b>Quip</b> folders into <b>Markdown</b>.</p>
       <div class="chips">
         <span class="chip">Calendars</span>

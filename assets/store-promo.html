@@ -43,18 +43,10 @@
         top: 0;
         bottom: 0;
       }
-      h1 {
-        margin: 0;
-        padding: 0 0.05em 0.09em 0;
+      .wordmark {
+        display: block;
         align-self: flex-start;
-        white-space: nowrap;
-        line-height: 1;
-        font-weight: 800;
-        letter-spacing: -0.035em;
-        background: linear-gradient(180deg, #ffffff 35%, #d8c8ff 100%);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
+        height: auto;
       }
       .tag {
         margin: 0;
@@ -64,7 +56,7 @@
       }
       .tag b {
         font-weight: 700;
-        color: #fde68a;
+        color: #67e8f9;
       }
       .foot {
         letter-spacing: 0.03em;
@@ -93,8 +85,9 @@
         left: 182px;
         right: 22px;
       }
-      body.tile h1 {
-        font-size: 50px;
+      body.tile .wordmark {
+        width: 236px;
+        margin-left: -4px;
       }
       body.tile .tag {
         margin-top: 10px;
@@ -125,8 +118,9 @@
         left: 590px;
         right: 60px;
       }
-      body.marquee h1 {
-        font-size: 124px;
+      body.marquee .wordmark {
+        width: 640px;
+        margin-left: -8px;
       }
       body.marquee .tag {
         margin-top: 22px;
@@ -150,7 +144,7 @@
     <svg id="stars" aria-hidden="true"></svg>
     <img class="logo" src="logo.svg" alt="" />
     <div class="copy">
-      <h1>Quipendo</h1>
+      <img class="wordmark" src="wordmark-on-dark.svg" alt="Quipendo" />
       <p class="tag" id="tag"></p>
       <div class="chips" id="chips"></div>
       <div class="foot" id="foot"></div>

@@ -78,7 +78,7 @@ Upload from [`assets/store/`](../assets/store):
 - Small promo tile (440 x 280): `promo-tile-440x280.jpg`
 - Marquee promo tile (1400 x 560, optional, needed to be featured): `marquee-1400x560.jpg`
 
-The screenshots show the real extension page working on the made-up account that the tests use. No real document or account appears in them. They are JPEG, so there is no alpha channel for the store's validation to trip over (a browser screenshot saved as PNG has one). Google suggests promo tiles that communicate the brand with little text; these are plain and can be replaced.
+The tiles carry the QuipEnd! wordmark; the listing's name field stays plain text, *Quipendo*. The screenshots show the real extension page working on the made-up account that the tests use. No real document or account appears in them. They are JPEG, so there is no alpha channel for the store's validation to trip over (a browser screenshot saved as PNG has one). Google suggests promo tiles that communicate the brand with little text; these are plain and can be replaced.
 
 ## Test instructions for the reviewer
 
