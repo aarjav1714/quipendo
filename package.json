@@ -1,9 +1,42 @@
 {
   "name": "quipendo",
   "version": "0.1.0",
-  "private": true,
   "description": "Quipendo: a read-only Chrome (MV3) extension and command line tool that copy your Quip folders and documents to Markdown files.",
+  "keywords": [
+    "quip",
+    "markdown",
+    "export",
+    "backup",
+    "migration",
+    "obsidian",
+    "chrome-extension",
+    "cli"
+  ],
+  "homepage": "https://github.com/aarjav1714/quip-md-export#readme",
+  "bugs": {
+    "url": "https://github.com/aarjav1714/quip-md-export/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aarjav1714/quip-md-export.git"
+  },
+  "author": "Aarjav",
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/aarjav1714"
+  },
   "type": "module",
+  "bin": {
+    "quipendo": "dist-cli/cli.mjs"
+  },
+  "files": [
+    "dist-cli/cli.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "^20.19 || ^22.13 || >=24"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:e2e": "node scripts/build.mjs --e2e",
@@ -15,15 +48,18 @@
     "test:watch": "vitest",
     "e2e": "npm run build:e2e && vitest run -c vitest.e2e.config.ts",
     "check": "npm run typecheck && npm run test && npm run build && npm run verify-build",
-    "verify-build": "node scripts/verify-build.mjs"
+    "verify-build": "node scripts/verify-build.mjs",
+    "prepack": "node scripts/build-cli.mjs"
   },
   "license": "MIT",
+  "dependencies": {
+    "jsdom": "^29.1.1"
+  },
   "devDependencies": {
     "@types/chrome": "^0.3.8",
     "@types/jsdom": "^30.0.0",
     "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
-    "jsdom": "^29.1.1",
     "playwright": "^1.65.1",
     "typescript": "^7.0.2",
     "vitest": "^5.1.1"

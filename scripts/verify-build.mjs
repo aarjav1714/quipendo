@@ -6,6 +6,14 @@ const failures = [];
 const fail = (message) => failures.push(message);
 
 const manifest = JSON.parse(await readFile(`${dist}manifest.json`, 'utf8'));
+
+// One version number: the extension, the npm package and the tool name written into every export must agree.
+const pkg = JSON.parse(await readFile(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
+const toolVersion = /export const TOOL_VERSION = '([^']+)'/.exec(await readFile(fileURLToPath(new URL('../src/core/exporter.ts', import.meta.url)), 'utf8'))?.[1];
+if (manifest.version !== pkg.version || toolVersion !== pkg.version) {
+  fail(`versions disagree: manifest ${manifest.version}, package.json ${pkg.version}, TOOL_VERSION ${toolVersion}`);
+}
+if (pkg.private) fail('package.json is still private, so it could not be published');
 if (JSON.stringify(manifest.host_permissions) !== JSON.stringify(['https://platform.quip.com/*'])) {
   fail(`host_permissions must be exactly platform.quip.com, got ${JSON.stringify(manifest.host_permissions)}`);
 }

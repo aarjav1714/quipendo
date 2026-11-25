@@ -4,6 +4,7 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { main, USAGE, type CliIo } from '../../src/node/cli';
+import { TOOL_VERSION } from '../../src/core/exporter';
 import { F_PROJ, SITE, T_READING, T_READING_SECRET, TOKEN } from '../mock/fixture';
 import { startMockQuip, type MockQuip } from '../mock/quipMock';
 import { listTree, virtualClock } from '../helpers/env';
@@ -224,5 +225,13 @@ describe('tokens and arguments', () => {
     const r = await run(['--help'], {});
     expect(r.code).toBe(0);
     expect(r.out.join('\n')).toBe(USAGE);
+  });
+
+  it('prints the version for --version, without asking for a folder or a token', async () => {
+    const r = await run(['--version'], {});
+    expect(r.code).toBe(0);
+    expect(r.out).toEqual([`Quipendo ${TOOL_VERSION}`]);
+    expect((await run(['-v'], {})).out).toEqual([`Quipendo ${TOOL_VERSION}`]);
+    expect(mock.requests).toHaveLength(0);
   });
 });

@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import type { ExportEvent, ExportOptions, ExportSummary, Plan } from '../core/exporter';
+import { TOOL_VERSION, type ExportEvent, type ExportOptions, type ExportSummary, type Plan } from '../core/exporter';
 import { AuthError, QuipClient } from '../core/quipClient';
 import { parseQuipUrl, quipIdFrom, rootChoices } from '../core/roots';
 import { createSession, type SessionConfig } from '../core/session';
@@ -15,8 +15,10 @@ extension. It only ever reads from Quip. Run it again to continue or to pick up 
 and files this tool did not write are never overwritten.
 
 Usage:
-  QUIP_TOKEN=... npm run cli -- --out <folder> [options]
-  echo "$TOKEN" | npm run cli -- --out <folder> --token-stdin [options]
+  QUIP_TOKEN=... npx quipendo --out <folder> [options]
+  echo "$TOKEN" | npx quipendo --out <folder> --token-stdin [options]
+
+(From a clone of the repository, use "npm run cli --" in place of "npx quipendo".)
 
 Create a token at https://<your-site>.quip.com/dev/token. It is read from the QUIP_TOKEN environment variable
 or from standard input and is never printed.
@@ -38,6 +40,7 @@ Options:
       --docx           Also save Quip's own Word (.docx) copy of each document next to its note (one more request each).
       --no-unfiled     Do not export documents you wrote that are in no folder.
       --token-stdin    Read the token from standard input instead of QUIP_TOKEN.
+  -v, --version        Show the version.
   -h, --help           Show this help.
 
 Exit status: 0 done, 1 finished with failed documents, 2 bad arguments or nothing to export,
@@ -119,6 +122,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
         'no-unfiled': { type: 'boolean' },
         'token-stdin': { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
+        version: { type: 'boolean', short: 'v' },
       },
     }).values;
   } catch (err) {
@@ -127,6 +131,10 @@ export async function main(argv: string[], env: Record<string, string | undefine
   }
   if (values.help) {
     io.out(USAGE);
+    return 0;
+  }
+  if (values.version) {
+    io.out(`Quipendo ${TOOL_VERSION}`);
     return 0;
   }
   if (!values.out) {
