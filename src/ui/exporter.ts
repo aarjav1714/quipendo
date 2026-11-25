@@ -1,10 +1,14 @@
 import {
   AuthError,
   DEFAULT_BASE_URL,
+  MemorySink,
   QuipClient,
   QuipHttpError,
+  SinkFullError,
+  ZipSink,
   createSession,
   parseQuipUrl,
+  quipIdFrom,
   rootChoices,
   type CurrentUser,
   type ExportEvent,
@@ -16,10 +20,11 @@ import {
 import { FsaSink } from './fsaSink';
 import { installReadOnlyGuard } from './guard';
 import { idbGet, idbSet } from './idb';
+import { renderPlanTree, type PlanTree } from './tree';
 
 declare const __E2E__: boolean;
 
-type Phase = 'loading' | 'idle' | 'connecting' | 'connected' | 'scanning' | 'scanned' | 'running' | 'done' | 'stopped' | 'error';
+type Phase = 'loading' | 'idle' | 'connecting' | 'connected' | 'scanning' | 'scanned' | 'running' | 'previewing' | 'done' | 'stopped' | 'error';
 type Tone = 'info' | 'ok' | 'warn' | 'error';
 
 interface PageTarget {
@@ -37,15 +42,32 @@ interface Connection {
 interface Settings {
   remember: boolean;
   includeComments: boolean;
+  anchorComments: boolean;
   keepRaw: boolean;
   saveXlsx: boolean;
+  saveDocx: boolean;
+  saveEditHistory: boolean;
   skipUnchanged: boolean;
   includeUnfiled: boolean;
   maxDocs: string;
+  output: 'folder' | 'zip';
   roots: string[] | null;
 }
 
-const DEFAULT_SETTINGS: Settings = { remember: false, includeComments: true, keepRaw: true, saveXlsx: true, skipUnchanged: true, includeUnfiled: true, maxDocs: '', roots: null };
+const DEFAULT_SETTINGS: Settings = {
+  remember: false,
+  includeComments: true,
+  anchorComments: true,
+  keepRaw: true,
+  saveXlsx: true,
+  saveDocx: false,
+  saveEditHistory: false,
+  skipUnchanged: true,
+  includeUnfiled: true,
+  maxDocs: '',
+  output: 'folder',
+  roots: null,
+};
 const KIND_LABEL: Record<RootChoice['kind'], string> = {
   private: 'Private',
   desktop: 'Desktop',
@@ -72,6 +94,16 @@ const ui = {
   connect: byId<HTMLButtonElement>('btn-connect'),
   forget: byId<HTMLButtonElement>('btn-forget'),
   connectStatus: byId('connect-status'),
+  previewUrl: byId<HTMLInputElement>('preview-url'),
+  preview: byId<HTMLButtonElement>('btn-preview'),
+  previewStatus: byId('preview-status'),
+  previewResult: byId('preview-result'),
+  previewText: byId<HTMLTextAreaElement>('preview-text'),
+  copy: byId<HTMLButtonElement>('btn-copy'),
+  downloadMd: byId<HTMLButtonElement>('btn-download-md'),
+  outFolder: byId<HTMLInputElement>('out-folder'),
+  outZip: byId<HTMLInputElement>('out-zip'),
+  folderRow: byId('folder-row'),
   pick: byId<HTMLButtonElement>('btn-pick'),
   regrant: byId<HTMLButtonElement>('btn-regrant'),
   targetName: byId('target-name'),
@@ -82,16 +114,27 @@ const ui = {
   scopeAll: byId<HTMLInputElement>('scope-all'),
   roots: byId('roots'),
   comments: byId<HTMLInputElement>('opt-comments'),
+  anchor: byId<HTMLInputElement>('opt-anchor'),
   raw: byId<HTMLInputElement>('opt-raw'),
   xlsx: byId<HTMLInputElement>('opt-xlsx'),
+  docx: byId<HTMLInputElement>('opt-docx'),
+  edits: byId<HTMLInputElement>('opt-edits'),
+  since: byId<HTMLInputElement>('opt-since'),
   skip: byId<HTMLInputElement>('opt-skip'),
   unfiled: byId<HTMLInputElement>('opt-unfiled'),
   max: byId<HTMLInputElement>('opt-max'),
   scan: byId<HTMLButtonElement>('btn-scan'),
   scanStatus: byId('scan-status'),
   scanSummary: byId('scan-summary'),
+  treePanel: byId('tree-panel'),
+  tree: byId('tree'),
+  treeFilter: byId<HTMLInputElement>('tree-filter'),
+  treeAll: byId<HTMLButtonElement>('btn-tree-all'),
+  treeNone: byId<HTMLButtonElement>('btn-tree-none'),
+  treeCount: byId('tree-count'),
   run: byId<HTMLButtonElement>('btn-run'),
   stop: byId<HTMLButtonElement>('btn-stop'),
+  zip: byId<HTMLButtonElement>('btn-zip'),
   progress: byId<HTMLProgressElement>('progress'),
   runStatus: byId('run-status'),
   log: byId('log'),
@@ -117,6 +160,13 @@ let working = false;
 let pendingFrom: string | undefined;
 let throttleUntil = 0;
 let exportStartedAt = 0;
+/** Save to a .zip held in memory instead of a folder. */
+let zipMode = false;
+let zipSink: ZipSink | undefined;
+/** The folder and document tree of the last scan, and what the user unticked in it. */
+let tree: PlanTree | undefined;
+let excluded = new Set<string>();
+let previewedTitle = '';
 
 // ---- small helpers -------------------------------------------------------
 
@@ -164,18 +214,37 @@ function setPhase(next: Phase): void {
   refresh();
 }
 
+const hasDestination = (): boolean => zipMode || target !== undefined;
+
 function refresh(): void {
-  const busy = phase === 'loading' || phase === 'connecting' || phase === 'scanning' || phase === 'running';
+  const busy = phase === 'loading' || phase === 'connecting' || phase === 'scanning' || phase === 'running' || phase === 'previewing';
   ui.connect.disabled = busy;
   ui.forget.disabled = busy;
   ui.token.disabled = busy;
   ui.pick.disabled = busy;
   ui.regrant.disabled = busy;
-  ui.scan.disabled = busy || !conn || !target;
-  ui.run.disabled = busy || !conn || !target || !hasScope();
-  ui.stop.disabled = phase !== 'connecting' && phase !== 'scanning' && phase !== 'running';
-  for (const el of [ui.comments, ui.raw, ui.xlsx, ui.skip, ui.unfiled, ui.max, ui.scopeAll, ui.scopePage]) el.disabled = busy;
+  ui.scan.disabled = busy || !conn || !hasDestination();
+  // Nothing ticked in the tree would export nothing.
+  const nothingTicked = tree !== undefined && tree.counts().selected === 0;
+  ui.run.disabled = busy || !conn || !hasDestination() || !hasScope() || nothingTicked;
+  ui.stop.disabled = phase !== 'connecting' && phase !== 'scanning' && phase !== 'running' && phase !== 'previewing';
+  ui.preview.disabled = busy || !conn;
+  ui.previewUrl.disabled = busy;
+  for (const el of [ui.comments, ui.raw, ui.xlsx, ui.docx, ui.unfiled, ui.max, ui.since, ui.scopeAll, ui.scopePage, ui.outFolder, ui.outZip]) el.disabled = busy;
+  // A .zip starts from nothing every time, so there is never anything to skip.
+  ui.skip.disabled = busy || zipMode;
+  ui.skip.title = zipMode ? 'A .zip starts from nothing every time, so there is nothing to skip.' : '';
+  // These only mean something together with the option they depend on.
+  ui.anchor.disabled = busy || !ui.comments.checked;
+  ui.edits.disabled = busy || !ui.raw.checked;
+  ui.treeFilter.disabled = busy;
+  ui.treeAll.disabled = busy;
+  ui.treeNone.disabled = busy;
+  for (const box of ui.tree.querySelectorAll('input, button')) (box as HTMLInputElement | HTMLButtonElement).disabled = busy;
   for (const box of ui.roots.querySelectorAll('input')) box.disabled = busy;
+  ui.folderRow.hidden = zipMode;
+  // Whatever the last run built can be saved, even after it stopped or failed: a .zip cannot be continued later.
+  ui.zip.hidden = !(zipMode && zipSink && zipSink.size > 0 && !busy);
 }
 
 // ---- settings and token --------------------------------------------------
@@ -189,11 +258,15 @@ function currentSettings(roots: string[] | null): Settings {
   return {
     remember: ui.remember.checked,
     includeComments: ui.comments.checked,
+    anchorComments: ui.anchor.checked,
     keepRaw: ui.raw.checked,
     saveXlsx: ui.xlsx.checked,
+    saveDocx: ui.docx.checked,
+    saveEditHistory: ui.edits.checked,
     skipUnchanged: ui.skip.checked,
     includeUnfiled: ui.unfiled.checked,
     maxDocs: ui.max.value.trim(),
+    output: zipMode ? 'zip' : 'folder',
     roots,
   };
 }
@@ -304,7 +377,7 @@ function renderRoots(saved: string[] | null): void {
     input.type = 'checkbox';
     input.value = root.id;
     input.checked = usable ? usable.includes(root.id) : root.defaultOn;
-    input.addEventListener('change', refresh);
+    input.addEventListener('change', onScopeInput);
     const name = document.createElement('span');
     name.textContent = root.title;
     const kind = document.createElement('small');
@@ -376,6 +449,8 @@ async function connect(): Promise<void> {
       session = undefined;
       const lookup = fromUrl ? await lookUpPage(client, fromUrl) : {};
       pageTarget = lookup.target;
+      hidePlan();
+      if (pageTarget?.kind === 'document' && fromUrl && !ui.previewUrl.value) ui.previewUrl.value = fromUrl;
       await saveToken(token, ui.remember.checked);
       const settings = await loadSettings();
       renderRoots(settings.roots);
@@ -403,7 +478,7 @@ async function selectPage(url: string): Promise<void> {
     pageTarget = lookup.target;
     renderPageScope();
     // The scope changed, so a scan shown for the old one no longer applies.
-    ui.scanSummary.hidden = true;
+    hidePlan();
     setStatus(ui.connectStatus, lookup.problem ? `${connectedText()} ${lookup.problem}` : connectedText(), lookup.problem ? 'warn' : 'ok');
     setPhase('connected');
   } catch (err) {
@@ -419,15 +494,32 @@ async function selectPage(url: string): Promise<void> {
 
 // ---- scan and export -----------------------------------------------------
 
-function buildOptions(): Partial<ExportOptions> {
+/** Local midnight of the chosen day, in the microseconds Quip uses; undefined when no day is chosen. */
+function sinceUsec(): number | undefined {
+  const [y, m, d] = ui.since.value.split('-').map(Number);
+  if (!y || !m || !d) return undefined;
+  return new Date(y, m - 1, d).getTime() * 1000;
+}
+
+/**
+ * What to export. A scan ignores what was unticked in the tree (the tree is drawn from the scan), so the tree always
+ * shows everything; the export itself leaves the unticked out.
+ */
+function buildOptions(withExclusions = true): Partial<ExportOptions> {
   const max = Number.parseInt(ui.max.value, 10);
+  const since = sinceUsec();
   const options: Partial<ExportOptions> = {
     includeComments: ui.comments.checked,
+    anchorComments: ui.anchor.checked,
     keepRaw: ui.raw.checked,
     saveXlsx: ui.xlsx.checked,
+    saveDocx: ui.docx.checked,
+    saveEditHistory: ui.edits.checked && ui.raw.checked,
     skipUnchanged: ui.skip.checked,
     includeUnfiled: ui.unfiled.checked,
     maxDocs: Number.isFinite(max) && max > 0 ? max : undefined,
+    ...(since !== undefined ? { sinceUsec: since } : {}),
+    ...(withExclusions && excluded.size > 0 ? { excludeIds: [...excluded].sort() } : {}),
     siteUrl: conn?.user.siteUrl,
     ownerId: conn?.user.id,
     allRootIds: conn?.roots.filter((r) => r.kind !== 'starred').map((r) => r.id) ?? [],
@@ -471,14 +563,17 @@ function handleEvent(event: ExportEvent): void {
   }
 }
 
-function makeSession(signal: AbortSignal): ReturnType<typeof createSession> {
-  if (!conn || !target) throw new Error('Connect to Quip and choose a target folder first.');
+function makeSession(signal: AbortSignal, withExclusions = true): ReturnType<typeof createSession> {
+  if (!conn || !hasDestination()) throw new Error('Connect to Quip and choose where to save first.');
+  // Test builds can shrink the .zip's size limit to reach the "too big" path without gigabytes of data.
+  const zipLimits = __E2E__ && params.has('zipMax') ? { maxBytes: Number(params.get('zipMax')) } : {};
+  const sink = zipMode ? (zipSink = new ZipSink(zipLimits)) : new FsaSink(target as FileSystemDirectoryHandle);
   return createSession({
     token: conn.token,
     baseUrl: BASE_URL,
-    sink: new FsaSink(target),
+    sink,
     parseHtml: (html) => new DOMParser().parseFromString(html, 'text/html'),
-    options: buildOptions(),
+    options: buildOptions(withExclusions),
     signal,
     onEvent: handleEvent,
     // Test builds skip the politeness delay because the mock server has no rate limit.
@@ -486,7 +581,7 @@ function makeSession(signal: AbortSignal): ReturnType<typeof createSession> {
   });
 }
 
-const scopeKey = (): string => JSON.stringify([buildOptions(), epoch]);
+const scopeKey = (withExclusions = true): string => JSON.stringify([buildOptions(withExclusions), epoch, zipMode]);
 
 /** Wipes the token from the page and from both kinds of browser storage, and disconnects. */
 async function forgetToken(): Promise<void> {
@@ -501,7 +596,7 @@ async function forgetToken(): Promise<void> {
     pageTarget = undefined;
     renderRoots(null);
     renderPageScope();
-    ui.scanSummary.hidden = true;
+    hidePlan();
     setStatus(ui.connectStatus, 'The token was removed from this page and from the browser. Paste a token to connect again.');
     setPhase('idle');
   });
@@ -537,6 +632,7 @@ function showPlan(plan: Plan): void {
   const lines = [`${plan.threads.length} documents in ${plan.folders.length} folders.`, ...[...perTop].map(([name, n]) => `  ${name}: ${n}`)];
   if (plan.unfiled > 0) lines.push(`${plan.unfiled} documents you wrote sit in no folder; they go under "_Unfiled".`);
   if (plan.othersUnfiled > 0) lines.push(`${plan.othersUnfiled} documents written by other people are in none of your folders and are not exported.`);
+  if (plan.leftOut.older > 0) lines.push(`${plan.leftOut.older} documents last changed before ${ui.since.value} are left out.`);
   if (plan.relocated.length > 0) lines.push(`${plan.relocated.length} documents get a new file name or folder (moved or renamed in Quip, or the old file name is taken); the old copy stays.`);
   const unreadable = plan.unreadableFolders.length + plan.unreadableThreads.length;
   if (unreadable > 0) lines.push(`${unreadable} items could not be read with this token and will be listed in the report.`);
@@ -548,17 +644,52 @@ function showPlan(plan: Plan): void {
   lines.push('', `About ${plan.estimatedRequests} Quip API requests. How long that takes depends on the speed Quip allows for your account; an estimate appears once the export is running.`);
   ui.scanSummary.textContent = lines.join('\n');
   ui.scanSummary.hidden = false;
+  if (plan.threads.length > 0) {
+    ui.treePanel.hidden = false;
+    tree = renderPlanTree(ui.tree, plan, excluded, onTreeChange);
+    excluded = new Set(tree.excluded());
+    updateTreeCount();
+  }
+}
+
+function updateTreeCount(): void {
+  const counts = tree?.counts();
+  ui.treeCount.textContent = counts ? `${counts.selected} of ${counts.total} documents ticked` : '';
+}
+
+function onTreeChange(): void {
+  excluded = new Set(tree?.excluded() ?? []);
+  updateTreeCount();
+  refresh();
+}
+
+/** What a scan covers changed (folders, date, limit), so the scan on screen, and what was unticked in it, no longer apply. */
+function onScopeInput(): void {
+  if (tree || !ui.scanSummary.hidden) hidePlan();
+  refresh();
+}
+
+/** Hides the scan result and the tree. A re-scan keeps what was unticked; anything else that changes the scope forgets it. */
+function hidePlan(keepSelection = false): void {
+  ui.scanSummary.hidden = true;
+  ui.treePanel.hidden = true;
+  ui.tree.replaceChildren();
+  ui.treeFilter.value = '';
+  ui.treeCount.textContent = '';
+  tree = undefined;
+  if (!keepSelection) excluded = new Set();
 }
 
 async function scan(): Promise<void> {
-  if (!conn || !target) return;
+  if (!conn || !hasDestination()) return;
   await exclusive(async () => {
     try {
       controller = new AbortController();
-      session = makeSession(controller.signal);
-      sessionKey = scopeKey();
+      // The scan ignores what was unticked, so the tree always shows everything; the export leaves it out.
+      session = makeSession(controller.signal, false);
+      sessionKey = scopeKey(false);
       await saveSettings();
-      ui.scanSummary.hidden = true;
+      hidePlan(true);
       setPhase('scanning');
       setStatus(ui.scanStatus, 'Scanning…');
       showPlan(await session.exporter.scan());
@@ -588,7 +719,7 @@ function summarize(s: ExportSummary): string {
   const parts = [`${s.docs.exported} saved`, `${s.docs.skipped} unchanged`];
   if (s.docs.failed > 0) parts.push(`${s.docs.failed} failed`);
   if (s.docs.notAttempted > 0) parts.push(`${s.docs.notAttempted} not attempted`);
-  return `${parts.join(', ')} of ${s.docs.planned} documents. The report is ${s.reportPath} in the target folder.`;
+  return `${parts.join(', ')} of ${s.docs.planned} documents. The report is ${s.reportPath} ${zipMode ? 'in the .zip' : 'in the target folder'}.`;
 }
 
 /** Held by the one exporter tab that is writing, so two tabs can never pick the same file name for different documents. */
@@ -614,7 +745,8 @@ async function runExport(): Promise<Phase> {
     release = await acquireWakeLock();
     const summary = await active.exporter.run();
     if (summary.aborted) {
-      setStatus(ui.runStatus, `Stopped. ${summarize(summary)} Start again to continue where it left off.`, 'warn');
+      const next = zipMode ? 'Save the .zip to keep what was exported; starting again begins from scratch.' : 'Start again to continue where it left off.';
+      setStatus(ui.runStatus, `Stopped. ${summarize(summary)} ${next}`, 'warn');
       return 'stopped';
     }
     ui.progress.value = ui.progress.max;
@@ -622,8 +754,15 @@ async function runExport(): Promise<Phase> {
     return 'done';
   } catch (err) {
     if (err instanceof AuthError) rejectToken();
-    const message = err instanceof AuthError ? `Stopped: ${TOKEN_REJECTED} Progress so far is saved, and the report lists what was not exported.` : describeError(err);
-    setStatus(ui.runStatus, isAbort(err) ? 'Stopped. Progress is saved.' : message, isAbort(err) ? 'warn' : 'error');
+    const keepsPartial = zipMode && zipSink !== undefined && zipSink.size > 0;
+    const keepIt = 'Save the .zip to keep what was exported.';
+    const message =
+      err instanceof AuthError
+        ? `Stopped: ${TOKEN_REJECTED} ${zipMode ? keepIt : 'Progress so far is saved, and the report lists what was not exported.'}`
+        : err instanceof SinkFullError && keepsPartial
+          ? `${describeError(err)} ${keepIt}`
+          : describeError(err);
+    setStatus(ui.runStatus, isAbort(err) ? `Stopped. ${zipMode ? keepIt : 'Progress is saved.'}` : message, isAbort(err) ? 'warn' : 'error');
     log(describeError(err), 'error');
     return isAbort(err) ? 'stopped' : err instanceof AuthError ? 'idle' : 'error';
   } finally {
@@ -633,7 +772,7 @@ async function runExport(): Promise<Phase> {
 }
 
 async function run(): Promise<void> {
-  if (!conn || !target) return;
+  if (!conn || !hasDestination()) return;
   await exclusive(async () => {
     const before = phase;
     stopRequested = false;
@@ -655,16 +794,137 @@ async function run(): Promise<void> {
   });
 }
 
+// ---- preview and saving a .zip -------------------------------------------
+
+/** Hands a file to the browser's downloads. Used for the preview and for the .zip, always from a click. */
+function download(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** What the converter notes about a document, in words. Anything not listed shows as its code. */
+const NOTE_TEXT: Record<string, string> = {
+  'ambiguous-date': 'a date that may be a day off (Quip does not say which time zone it was written in)',
+  'empty-html': 'Quip sent no content (often a permissions issue)',
+  'comments-incomplete': 'some comments could not be listed',
+  'nested-table-flattened': 'a table inside a table was flattened',
+  'liveapp-truncated': 'a calendar, board or tracker was shortened',
+  'unknown-live-app': 'an embedded app this tool does not know',
+  'live-app-no-data': 'an embedded app sent no data',
+};
+
+/** Converts one document without saving anything or downloading attachments, so a person can see what an export would make of it. */
+async function preview(): Promise<void> {
+  if (!conn) return;
+  const id = quipIdFrom(ui.previewUrl.value);
+  if (!id) {
+    setStatus(ui.previewStatus, 'Paste the address of a Quip document, such as https://your-site.quip.com/AbCdEfGhIjKl/Title.', 'warn');
+    return;
+  }
+  await exclusive(async () => {
+    if (!conn) return;
+    const before = phase;
+    controller = new AbortController();
+    ui.previewResult.hidden = true;
+    setPhase('previewing');
+    setStatus(ui.previewStatus, 'Reading the document…');
+    try {
+      const { exporter } = createSession({
+        token: conn.token,
+        baseUrl: BASE_URL,
+        sink: new MemorySink(),
+        parseHtml: (html) => new DOMParser().parseFromString(html, 'text/html'),
+        options: {
+          includeComments: ui.comments.checked,
+          anchorComments: ui.anchor.checked,
+          siteUrl: conn.user.siteUrl,
+          ownerId: conn.user.id,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
+        signal: controller.signal,
+        ...(E2E ? { client: { minIntervalMs: 0 } } : {}),
+      });
+      const result = await exporter.preview(id);
+      previewedTitle = result.title;
+      ui.previewText.value = result.markdown;
+      ui.previewResult.hidden = false;
+      // Every link to another document counts as "outside" here, since nothing was exported for it to point at.
+      const notes = [...new Set(result.warnings.map((w) => w.code))].filter((code) => code !== 'link-outside-export').map((code) => NOTE_TEXT[code] ?? code);
+      setStatus(ui.previewStatus, `${result.title} (${result.type}). Nothing was saved.${notes.length > 0 ? ` Notes: ${notes.join('; ')}.` : ''}`, 'ok');
+      setPhase(before);
+    } catch (err) {
+      if (err instanceof AuthError) {
+        rejectToken();
+        setStatus(ui.previewStatus, TOKEN_REJECTED, 'error');
+        setPhase('idle');
+        return;
+      }
+      setStatus(ui.previewStatus, isAbort(err) ? 'Preview stopped.' : describeError(err), isAbort(err) ? 'warn' : 'error');
+      setPhase(before);
+    }
+  });
+}
+
+async function copyPreview(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(ui.previewText.value);
+    setStatus(ui.previewStatus, 'Copied the Markdown to the clipboard.', 'ok');
+  } catch {
+    ui.previewText.select();
+    setStatus(ui.previewStatus, 'The browser would not copy it for you. The text is selected: press Ctrl+C (⌘C on a Mac).', 'warn');
+  }
+}
+
+function downloadPreview(): void {
+  // eslint-disable-next-line no-control-regex
+  const name = `${previewedTitle.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-').trim() || 'Quip document'}.md`;
+  download(new Blob([ui.previewText.value], { type: 'text/markdown' }), name);
+}
+
+/** Switches between saving to a folder and saving to a .zip. Whatever was scanned belongs to the other choice. */
+function setOutput(zip: boolean): void {
+  zipMode = zip;
+  epoch += 1;
+  session = undefined;
+  zipSink = undefined;
+  hidePlan();
+  refresh();
+  void saveSettings();
+}
+
+async function saveZip(): Promise<void> {
+  if (!zipSink) return;
+  try {
+    download(await zipSink.toBlob(), `quipendo-export-${new Date().toISOString().slice(0, 10)}.zip`);
+    setStatus(ui.runStatus, 'The .zip was sent to your browser to save.', 'ok');
+  } catch (err) {
+    setStatus(ui.runStatus, describeError(err), 'error');
+  }
+}
+
 // ---- start-up ------------------------------------------------------------
 
 function applySettings(s: Settings): void {
   ui.remember.checked = s.remember;
   ui.comments.checked = s.includeComments;
+  ui.anchor.checked = s.anchorComments;
   ui.raw.checked = s.keepRaw;
   ui.xlsx.checked = s.saveXlsx;
+  ui.docx.checked = s.saveDocx;
+  ui.edits.checked = s.saveEditHistory;
   ui.skip.checked = s.skipUnchanged;
   ui.unfiled.checked = s.includeUnfiled;
   ui.max.value = s.maxDocs;
+  zipMode = s.output === 'zip';
+  ui.outZip.checked = zipMode;
+  ui.outFolder.checked = !zipMode;
 }
 
 async function init(): Promise<void> {
@@ -684,11 +944,22 @@ async function init(): Promise<void> {
   ui.regrant.addEventListener('click', () => void regrantTarget());
   ui.scan.addEventListener('click', () => void scan());
   ui.run.addEventListener('click', () => void run());
+  ui.preview.addEventListener('click', () => void preview());
+  ui.previewUrl.addEventListener('keydown', (e) => e.key === 'Enter' && void preview());
+  ui.copy.addEventListener('click', () => void copyPreview());
+  ui.downloadMd.addEventListener('click', downloadPreview);
+  ui.zip.addEventListener('click', () => void saveZip());
+  for (const el of [ui.outFolder, ui.outZip]) el.addEventListener('change', () => setOutput(ui.outZip.checked));
+  ui.treeFilter.addEventListener('input', () => tree?.setFilter(ui.treeFilter.value));
+  ui.treeAll.addEventListener('click', () => tree?.tickShown(true));
+  ui.treeNone.addEventListener('click', () => tree?.tickShown(false));
+  for (const el of [ui.comments, ui.raw]) el.addEventListener('change', refresh);
+  for (const el of [ui.unfiled, ui.since, ui.max, ui.scopeAll, ui.scopePage]) el.addEventListener('change', onScopeInput);
+  ui.max.addEventListener('input', onScopeInput);
   ui.stop.addEventListener('click', () => {
     stopRequested = true;
     controller?.abort();
   });
-  for (const el of [ui.scopeAll, ui.scopePage]) el.addEventListener('change', refresh);
   ui.remember.addEventListener('change', () => {
     // Unticking must take effect now, not at the next connect.
     if (!ui.remember.checked) void chrome.storage.local.remove('token');

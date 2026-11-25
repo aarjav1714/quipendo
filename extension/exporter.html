@@ -18,8 +18,8 @@
           </div>
         </div>
         <p class="lede">
-          Copies your Quip folders and documents into a folder on this computer as Markdown files, including calendars, Kanban boards,
-          project trackers and spreadsheets.
+          Copies your Quip folders and documents into a folder (or one .zip file) on this computer as Markdown files, including calendars,
+          Kanban boards, project trackers and spreadsheets.
         </p>
         <p class="safe">
           <strong>Read-only.</strong> This tool only asks Quip to <em>read</em> things. It cannot create, edit or delete a Quip document, and it never
@@ -44,14 +44,38 @@
         <p id="connect-status" class="status" role="status" data-tone="info"></p>
       </section>
 
-      <section id="step-target">
-        <h2><span class="n">2</span> Choose the target folder</h2>
+      <section id="step-preview">
+        <h2>Optional: preview one document</h2>
+        <p class="hint">
+          Paste the address of a Quip document to see what it becomes. Nothing is saved, and a preview leaves out images and attachments (a full
+          export saves them). Needs the connection above; no folder.
+        </p>
         <div class="row">
-          <button id="btn-pick" type="button">Choose folder…</button>
-          <button id="btn-regrant" type="button" hidden>Allow access again</button>
-          <span id="target-name" class="mono"></span>
+          <input id="preview-url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://your-site.quip.com/…" aria-label="Quip document address" />
+          <button id="btn-preview" type="button">Preview</button>
         </div>
-        <p id="target-hint" class="hint">Quip's folder structure is recreated inside it. A new, empty folder or an Obsidian vault works well.</p>
+        <p id="preview-status" class="status" role="status" data-tone="info"></p>
+        <div id="preview-result" hidden>
+          <textarea id="preview-text" readonly rows="14" spellcheck="false" aria-label="The document as Markdown"></textarea>
+          <div class="row">
+            <button id="btn-copy" type="button">Copy Markdown</button>
+            <button id="btn-download-md" type="button">Download .md</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="step-target">
+        <h2><span class="n">2</span> Choose where to save</h2>
+        <label class="check"><input id="out-folder" type="radio" name="output" checked /><span>A folder on this computer (best: it can be stopped, continued and updated later)</span></label>
+        <label class="check"><input id="out-zip" type="radio" name="output" /><span>One .zip file to download (starts fresh each time, and is kept in memory until you save it)</span></label>
+        <div id="folder-row">
+          <div class="row">
+            <button id="btn-pick" type="button">Choose folder…</button>
+            <button id="btn-regrant" type="button" hidden>Allow access again</button>
+            <span id="target-name" class="mono"></span>
+          </div>
+          <p id="target-hint" class="hint">Quip's folder structure is recreated inside it. A new, empty folder or an Obsidian vault works well.</p>
+        </div>
       </section>
 
       <section id="step-scope">
@@ -64,10 +88,14 @@
         <fieldset class="options">
           <legend>Options</legend>
           <label class="check"><input id="opt-comments" type="checkbox" checked /><span>Include comments and conversation</span></label>
+          <label class="check nested"><input id="opt-anchor" type="checkbox" checked /><span>Put comments on highlighted text next to that text, as footnotes</span></label>
           <label class="check"><input id="opt-raw" type="checkbox" checked /><span>Keep Quip's original HTML and metadata (<code>.quip-raw</code>) so nothing is lost. If you delete that folder later, untick this, or the documents are fetched again.</span></label>
           <label class="check"><input id="opt-xlsx" type="checkbox" checked /><span>Also save spreadsheets as <code>.xlsx</code> (the only way to keep formulas)</span></label>
+          <label class="check"><input id="opt-docx" type="checkbox" /><span>Also save Quip's Word (<code>.docx</code>) copy of each document (one more request each; Word copies leave comments out)</span></label>
+          <label class="check"><input id="opt-edits" type="checkbox" /><span>Also keep each document's edit history as Quip sends it (experimental; goes in the original-HTML archive; one more request each)</span></label>
           <label class="check"><input id="opt-unfiled" type="checkbox" checked /><span>Include documents you wrote that are in no folder</span></label>
           <label class="check"><input id="opt-skip" type="checkbox" checked /><span>Skip documents unchanged since the last export</span></label>
+          <label class="check"><span>Only documents changed since</span><input id="opt-since" type="date" class="date" aria-label="Only documents changed since this date" /><span>(empty: all)</span></label>
           <label class="check"><span>Limit to the first</span><input id="opt-max" type="number" min="1" step="1" placeholder="all" class="narrow" /><span>documents (useful for a trial run)</span></label>
         </fieldset>
         <div class="row">
@@ -75,6 +103,17 @@
           <span id="scan-status" class="status" role="status" data-tone="info"></span>
         </div>
         <pre id="scan-summary" hidden></pre>
+        <div id="tree-panel" hidden>
+          <h3>Choose folders and documents</h3>
+          <p class="hint">Everything is ticked. Untick what you do not want, then start the export. The tree shows where each document will be saved.</p>
+          <div class="row">
+            <input id="tree-filter" type="search" autocomplete="off" spellcheck="false" placeholder="Filter by name" aria-label="Filter folders and documents by name" />
+            <button id="btn-tree-all" type="button">Tick shown</button>
+            <button id="btn-tree-none" type="button">Untick shown</button>
+            <span id="tree-count" class="status" role="status"></span>
+          </div>
+          <div id="tree" class="tree" aria-label="Folders and documents to export"></div>
+        </div>
       </section>
 
       <section id="step-run">
@@ -82,6 +121,7 @@
         <div class="row">
           <button id="btn-run" type="button" class="primary">Start export</button>
           <button id="btn-stop" type="button" disabled>Stop</button>
+          <button id="btn-zip" type="button" class="primary" hidden>Save the .zip</button>
         </div>
         <progress id="progress" value="0" max="1"></progress>
         <p id="run-status" class="status" role="status" data-tone="info"></p>

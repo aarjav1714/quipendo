@@ -53,7 +53,7 @@ for (const [file, size] of icons) {
 
 for (const file of ['exporter.js', 'background.js']) {
   const code = await readFile(`${dist}${file}`, 'utf8');
-  for (const token of ['tryMutation', '__e2e', 'e2e-target', 'freshTestTarget']) if (code.includes(token)) fail(`${file} contains test-only token "${token}"`);
+  for (const token of ['tryMutation', '__e2e', 'e2e-target', 'freshTestTarget', 'zipMax']) if (code.includes(token)) fail(`${file} contains test-only token "${token}"`);
   if (/\beval\s*\(|new Function\s*\(/.test(code)) fail(`${file} uses eval or new Function`);
   const hosts = new Set([...code.matchAll(/https?:\/\/([a-z0-9.-]+)/gi)].map((m) => m[1].toLowerCase()));
   for (const host of hosts) if (!/(^|\.)quip\.com$/.test(host)) fail(`${file} references unexpected host ${host}`);

@@ -31,7 +31,7 @@ export const T_NOTES_B = 'NOTESthrdB1';
 export const T_ILLEGAL = 'ILLEGALthr1';
 export const T_SHARED = 'SHAREDthrd1';
 export const T_LOOSE = 'LOOSEthrd01';
-export const T_CHAT = 'CHATthread01';
+export const T_CHAT = 'CHATthrd001';
 /** Written by Ann, in a shared folder the tests do not select. */
 export const T_OTHER = 'OTHERthrd01';
 /** Written by the user, but sitting in Trash. */
