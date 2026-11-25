@@ -88,7 +88,7 @@ try {
   await page.close();
 
   page = await open();
-  await page.check('#out-zip');
+  await page.check('#out-store');
   await page.click('#btn-scan');
   await state(page, 'scanned');
   await page.click('#btn-run');
@@ -124,7 +124,7 @@ try {
   };
   await framed('screenshot-1-preview', 'See what a document becomes first', 'Calendars, boards and trackers turn into plain Markdown. Nothing is saved in a preview.', shots.preview);
   await framed('screenshot-2-choose', 'Pick exactly what to export', 'Tick folders and documents, filter by name, and see where each one will be saved.', shots.tree, 24);
-  await framed('screenshot-3-export', 'Save a folder or one .zip', 'Read-only: Quipendo can look at your Quip documents but cannot change them.', shots.zip);
+  await framed('screenshot-3-export', 'Save to a folder, or as a .zip', 'Read-only: Quipendo can look at your Quip documents but cannot change them.', shots.zip);
 
   const tiles = [
     ['promo-tile-440x280', '?tile', { width: 440, height: 280 }],
