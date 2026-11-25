@@ -1,10 +1,13 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
-import { ZipSink, ZipTooLargeError, crc32 } from '../../src/core/zip';
+import { describe, expect, it, vi } from 'vitest';
+import { ZipTooLargeError, crc32, partitionZip, zipBlob, zipItems, type ZipItem } from '../../src/core/zip';
 import { readZip, type ZipEntry } from '../helpers/unzip';
 
-const bytesOf = async (sink: ZipSink): Promise<Uint8Array> => new Uint8Array(await (await sink.toBlob()).arrayBuffer());
+const bytes = (data: string | Uint8Array): Uint8Array => (typeof data === 'string' ? new TextEncoder().encode(data) : data);
+const file = (name: string, data: string | Uint8Array): ZipItem => ({ name, size: bytes(data).length, crc: crc32(bytes(data)), data: bytes(data) });
+const unzip = async (blob: Blob): Promise<Record<string, ZipEntry>> => readZip(new Uint8Array(await blob.arrayBuffer()));
 const text = (e: ZipEntry | undefined): string | undefined => (e ? new TextDecoder().decode(e.data) : undefined);
+const WHEN = new Date(2026, 10, 25, 14, 30, 8);
 
 describe('crc32', () => {
   it('matches the standard check value', () => {
@@ -13,17 +16,15 @@ describe('crc32', () => {
   });
 });
 
-describe('ZipSink', () => {
+describe('zipBlob', () => {
   it('produces a standard archive: names, contents, checksums, empty folders and permissions', async () => {
-    const sink = new ZipSink({}, () => new Date(2026, 10, 25, 14, 30, 8));
     const long = `# Heading\n\n${'A line of text that compresses well. '.repeat(40)}\n`;
     const png = Uint8Array.from({ length: 300 }, (_, i) => (i * 37) % 251);
-    await sink.ensureDir('Private/Projects');
-    await sink.ensureDir('Empty folder');
-    await sink.writeFile('Private/Projects/Plan.md', long);
-    await sink.writeFile('Private/Ünïcode – title.md', 'short');
-    await sink.writeFile('_attachments/t1/pic.png', png);
-    const zip = readZip(await bytesOf(sink));
+    const items = zipItems(
+      [file('Private/Projects/Plan.md', long), file('Private/Ünïcode – title.md', 'short'), file('_attachments/t1/pic.png', png)],
+      ['Private/Projects', 'Empty folder', 'Private'],
+    );
+    const zip = await unzip(await zipBlob(items, WHEN));
 
     expect(Object.keys(zip).sort()).toEqual(['Empty folder/', 'Private/Projects/Plan.md', 'Private/Ünïcode – title.md', '_attachments/t1/pic.png']);
     expect(text(zip['Private/Projects/Plan.md'])).toBe(long);
@@ -38,38 +39,58 @@ describe('ZipSink', () => {
     for (const [name, entry] of Object.entries(zip)) expect(entry.crc, name).toBe(crc32(entry.data));
   });
 
-  it('reads back what it holds, like the other sinks, and keeps the latest write to a path', async () => {
-    const sink = new ZipSink();
-    await sink.writeFile('a/state.json', '{"v":1}');
-    await sink.writeFile('a/state.json', '{"v":2}');
-    expect(await sink.readText('a/state.json')).toBe('{"v":2}');
-    expect(await sink.readHead('a/state.json', 4)).toBe('{"v"');
-    expect(await sink.exists('a/state.json')).toBe(true);
-    expect(await sink.exists('a/other.json')).toBe(false);
-    expect(await sink.readBytes('nothing.md')).toBeUndefined();
-    expect(sink.size).toBe(1);
-    expect(Object.keys(readZip(await bytesOf(sink)))).toEqual(['a/state.json']);
+  it('stores a Blob as it is, and asks for lazy bytes only when the entry is written', async () => {
+    const picture = Uint8Array.from({ length: 500 }, (_, i) => i % 251);
+    const calls: string[] = [];
+    const lazy = (name: string, data: Uint8Array | Blob): ZipItem => {
+      const size = data instanceof Blob ? data.size : data.length;
+      const crc = crc32(data instanceof Blob ? picture : data);
+      return { name, size, crc, data: async () => (calls.push(name), data) };
+    };
+    const blob = await zipBlob([lazy('a.md', bytes(`${'text '.repeat(100)}`)), lazy('b.bin', new Blob([picture]))], WHEN);
+    expect(calls).toEqual(['a.md', 'b.bin']);
+    const zip = await unzip(blob);
+    expect(zip['a.md']?.method).toBe(8);
+    expect(zip['b.bin']?.method).toBe(0);
+    expect(Array.from(zip['b.bin']?.data ?? [])).toEqual(Array.from(picture));
   });
 
-  it('refuses paths that could escape the archive', async () => {
-    const sink = new ZipSink();
-    await expect(Promise.resolve().then(() => sink.writeFile('../evil.md', 'x'))).rejects.toThrow(/unsafe path/);
-    await expect(Promise.resolve().then(() => sink.writeFile('/abs.md', 'x'))).rejects.toThrow(/unsafe path/);
+  it('stores text as it is where the browser has no deflate', async () => {
+    vi.stubGlobal('CompressionStream', undefined);
+    try {
+      const long = 'plain text '.repeat(50);
+      const zip = await unzip(await zipBlob([file('a.md', long)], WHEN));
+      expect(zip['a.md']?.method).toBe(0);
+      expect(text(zip['a.md'])).toBe(long);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
-  it('stops early, with a clear message, when the export is too big for one archive', async () => {
-    const small = new ZipSink({ maxBytes: 1000 });
-    await small.writeFile('a.bin', new Uint8Array(600));
-    expect(() => small.writeFile('b.bin', new Uint8Array(600))).toThrow(ZipTooLargeError);
-    expect(() => small.writeFile('b.bin', new Uint8Array(600))).toThrow(/Save to a folder instead/);
-    const rewrite = new ZipSink({ maxBytes: 1000 });
-    await rewrite.writeFile('a.bin', new Uint8Array(900));
-    await rewrite.writeFile('a.bin', new Uint8Array(950)); // replacing a file only counts the difference
+  it('refuses more entries than the classic format can count', async () => {
+    const many = Array.from({ length: 0xffff }, (_, i): ZipItem => ({ name: `f${i}`, size: 0, crc: 0 }));
+    await expect(zipBlob(many, WHEN)).rejects.toThrow(ZipTooLargeError);
+  });
+});
 
-    const few = new ZipSink({ maxEntries: 2 });
-    await few.writeFile('1.md', 'a');
-    await few.writeFile('2.md', 'b');
-    await few.writeFile('2.md', 'c'); // rewriting is not a new entry
-    expect(() => few.writeFile('3.md', 'd')).toThrow(/more than 2 files/);
+describe('zipItems', () => {
+  it('adds an entry only for folders that hold nothing, and sorts everything', () => {
+    const items = zipItems([file('b/two.md', '2'), file('a.md', '1'), file('b/c/three.md', '3')], ['b', 'b/c', 'empty', 'empty/inner', '']);
+    expect(items.map((i) => i.name)).toEqual(['empty/', 'empty/inner/', 'a.md', 'b/c/three.md', 'b/two.md']);
+  });
+});
+
+describe('partitionZip', () => {
+  const sized = (name: string, size: number): ZipItem => ({ name, size, crc: 0 });
+
+  it('splits in order by size and by count, and gives a file bigger than a part a part of its own', () => {
+    const items = [sized('a', 40), sized('b', 40), sized('c', 40), sized('big', 500), sized('d', 10)];
+    expect(partitionZip(items, { maxBytes: 100 }).map((g) => g.map((i) => i.name))).toEqual([['a', 'b'], ['c'], ['big'], ['d']]);
+    expect(partitionZip(items, { maxBytes: 1000, maxEntries: 2 }).map((g) => g.map((i) => i.name))).toEqual([['a', 'b'], ['c', 'big'], ['d']]);
+  });
+
+  it('makes one part for a small export, and one (empty) part for nothing', () => {
+    expect(partitionZip([sized('a', 1), sized('b', 2)])).toHaveLength(1);
+    expect(partitionZip([])).toEqual([[]]);
   });
 });

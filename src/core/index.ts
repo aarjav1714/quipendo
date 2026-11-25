@@ -5,4 +5,4 @@ export type { QuipApi, CurrentUser } from './quipTypes';
 export { rootChoices, parseQuipUrl, quipIdFrom, type RootChoice } from './roots';
 export { createSession, type SessionConfig } from './session';
 export { MemorySink, SinkFullError, splitSafePath, type Sink } from './sink';
-export { ZipSink, ZipTooLargeError, crc32 } from './zip';
+export { PART_MAX_BYTES, PART_MAX_ENTRIES, ZipTooLargeError, crc32, partitionZip, zipBlob, zipItems, type ZipBudget, type ZipItem } from './zip';

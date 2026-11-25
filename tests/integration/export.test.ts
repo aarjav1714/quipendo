@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ExportEvent, ExportOptions, ExportSummary } from '../../src/core/exporter';
 import { AuthError, READ_ONLY_ENDPOINTS } from '../../src/core/quipClient';
 import { createSession } from '../../src/core/session';
-import { ZipSink } from '../../src/core/zip';
+import { MemoryBackend, StoreSink } from '../../src/ui/storeSink';
 import {
   ANN,
   B_FILE,
@@ -40,6 +40,7 @@ import {
 } from '../mock/fixture';
 import { startMockQuip, type MockOptions, type MockQuip } from '../mock/quipMock';
 import { NodeFsSink, listTree, parseHtml, virtualClock } from '../helpers/env';
+import { readZip, type ZipEntry } from '../helpers/unzip';
 
 interface Ctx {
   mock: MockQuip;
@@ -734,7 +735,7 @@ describe('previewing one document', () => {
 
 describe('an output that fills up', () => {
   it('stops at once with the sink\'s message, instead of failing every remaining document', async () => {
-    const sink = new ZipSink({ maxEntries: 6 });
+    const sink = await StoreSink.open(new MemoryBackend(), { maxBytes: 12_000 });
     const { exporter } = createSession({
       token: TOKEN,
       baseUrl: ctx.mock.url,
@@ -743,13 +744,13 @@ describe('an output that fills up', () => {
       options: { rootIds: [F_PRIV, F_DESK, F_SHARED], allRootIds: ALL_ROOTS, ownerId: ME.id, siteUrl: SITE, timeZone: 'UTC' },
       client: { minIntervalMs: 0, sleep: ctx.clock.sleep, now: ctx.clock.now, messagePageSize: 2 },
     });
-    await expect(exporter.run()).rejects.toThrow(/more than 6 files.*Save to a folder instead/);
+    await expect(exporter.run()).rejects.toThrow(/no room left to keep the export/);
     expect(requestsTo(/\/html$/)).toBeLessThan(9); // it did not go on asking for documents it could not keep
-    expect(sink.size).toBeLessThanOrEqual(6);
+    expect((await sink.stats()).bytes).toBeLessThanOrEqual(12_000);
   });
 
   it('is described in the report when the output can still take it', async () => {
-    const sink = new ZipSink({ maxBytes: 200_000 });
+    const sink = await StoreSink.open(new MemoryBackend(), { maxBytes: 200_000 });
     const { exporter } = createSession({
       token: TOKEN,
       baseUrl: ctx.mock.url,
@@ -761,6 +762,89 @@ describe('an output that fills up', () => {
     const summary = await exporter.run();
     expect(summary.stopReason).toBe('completed');
     expect(await sink.readText('_Quip export report.md')).toContain('- Status: Finished');
+  });
+});
+
+describe('exporting into the browser\'s own storage (Firefox, Safari and any browser without a folder picker)', () => {
+  const sessionFor = (sink: StoreSink, options: Partial<ExportOptions> = {}) =>
+    createSession({
+      token: TOKEN,
+      baseUrl: ctx.mock.url,
+      sink,
+      parseHtml,
+      options: { rootIds: [F_PRIV, F_DESK, F_SHARED], allRootIds: ALL_ROOTS, ownerId: ME.id, siteUrl: SITE, timeZone: 'UTC', ...options },
+      client: { minIntervalMs: 0, sleep: ctx.clock.sleep, now: ctx.clock.now, messagePageSize: 2 },
+    });
+
+  /** The tree a store holds, in the shape `listTree` gives for a folder. */
+  async function treeOf(store: StoreSink): Promise<Record<string, string>> {
+    const out: Record<string, string> = {};
+    for (const meta of await store.list()) {
+      const data = await store.read(meta.path);
+      out[meta.path] = typeof data === 'string' ? data : `<binary ${meta.size} bytes>`;
+    }
+    return out;
+  }
+  async function folderTree(): Promise<Record<string, string>> {
+    const out: Record<string, string> = {};
+    for (const path of (await listTree(ctx.dir)).filter((p) => !p.endsWith('/'))) {
+      const bytes = await readFile(join(ctx.dir, path));
+      out[path] = /\.(md|json|html|txt)$/.test(path) ? bytes.toString('utf8') : `<binary ${bytes.length} bytes>`;
+    }
+    return out;
+  }
+  // The saved state records durations and hashes of notes that carry their export time, so it differs between any two runs.
+  const withoutTimes = (tree: Record<string, string>): Record<string, string> =>
+    Object.fromEntries(
+      Object.entries(tree)
+        .filter(([p]) => !p.startsWith('.quip-md-export/'))
+        .map(([p, t]) => [p, t.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, '<time>')]),
+    );
+
+  it('writes exactly what a folder export writes', async () => {
+    const store = await StoreSink.open(new MemoryBackend());
+    const summary = await sessionFor(store).exporter.run();
+    expect(summary).toMatchObject({ stopReason: 'completed', docs: { planned: 9, exported: 9, failed: 0 } });
+    await runAll(); // the same export into a real folder
+    expect(withoutTimes(await treeOf(store))).toEqual(withoutTimes(await folderTree()));
+  });
+
+  it('can be stopped and carried on after the page was closed: only what is missing is fetched', async () => {
+    const backend = new MemoryBackend();
+    const first = await sessionFor(await StoreSink.open(backend), { maxDocs: 3 }).exporter.run();
+    expect(first.docs).toMatchObject({ exported: 3, skipped: 0 });
+    const htmlBefore = requestsTo(/\/html$/);
+
+    // A new page opens the same storage.
+    const store = await StoreSink.open(backend);
+    const again = await sessionFor(store).exporter.run();
+    // A note whose links could not be resolved yet is rendered again once its targets exist, as it is with a folder.
+    expect(again.docs.exported + again.docs.skipped).toBe(9);
+    expect(again.docs.skipped).toBeGreaterThanOrEqual(2);
+    expect(requestsTo(/\/html$/) - htmlBefore).toBe(again.docs.exported);
+    expect((await sessionFor(store).exporter.run()).docs).toMatchObject({ exported: 0, skipped: 9 });
+  });
+
+  it('updates only the document that changed in Quip, and saves everything as .zip files that unzip to the same tree', async () => {
+    const store = await StoreSink.open(new MemoryBackend());
+    await sessionFor(store).exporter.run();
+    const notes = ctx.mock.fixture.threads[T_NOTES_A];
+    if (!notes) throw new Error('fixture changed');
+    notes.pages = ["<h1>Notes</h1><p class='line'>edited in Quip</p>"];
+    notes.updated += 60_000_000;
+
+    const summary = await sessionFor(store).exporter.run();
+    expect(summary.docs).toMatchObject({ exported: 1, skipped: 8 });
+    expect(await store.readText('Private/Notes.md')).toContain('edited in Quip');
+
+    const parts = await store.zipParts({ maxBytes: 30_000 });
+    expect(parts.length).toBeGreaterThan(1);
+    const files: Record<string, ZipEntry> = {};
+    for (const part of parts) Object.assign(files, readZip(new Uint8Array(await (await part.build()).arrayBuffer())));
+    const stored = await store.list();
+    expect(Object.keys(files).filter((n) => !n.endsWith('/')).sort()).toEqual(stored.map((m) => m.path).sort());
+    expect(Object.keys(files)).toEqual(expect.arrayContaining(['Desktop/'])); // an empty Quip folder is still a folder
+    expect(new TextDecoder().decode(files['Private/Notes.md']?.data)).toContain('edited in Quip');
   });
 });
 
