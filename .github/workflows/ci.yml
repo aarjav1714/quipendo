@@ -89,7 +89,7 @@ jobs:
   safari:
     name: Safari package builds (macOS)
     runs-on: macos-latest
-    # The conversion and the build below have not run anywhere yet (docs/safari.md says why). Remove this line once the job has passed.
+    # The conversion works on the runner (Xcode 26.6); the build below is being proven. Remove this line once the job has passed.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v7
@@ -106,9 +106,11 @@ jobs:
             --bundle-identifier io.github.aarjav1714.quipendo \
             --macos-only --no-open --no-prompt --copy-resources
       - name: Build it without signing
+        # With --macos-only the project has one scheme, named after the app (an iOS target would add "(macOS)" and "(iOS)").
         run: |
-          xcodebuild -project "$RUNNER_TEMP/safari/Quipendo/Quipendo.xcodeproj" \
-            -scheme "Quipendo (macOS)" -configuration Release CODE_SIGNING_ALLOWED=NO build
+          project="$RUNNER_TEMP/safari/Quipendo/Quipendo.xcodeproj"
+          xcodebuild -list -project "$project"
+          xcodebuild -project "$project" -scheme Quipendo -configuration Release CODE_SIGNING_ALLOWED=NO build
 
   # The package people install must run on every Node version it claims to support, not just the one it was built on.
   package:
