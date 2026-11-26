@@ -1,7 +1,7 @@
 ---
 title: "Team Handbook"
-quip_id: "HANDBOOKteam"
-quip_url: "https://acme.quip.com/HANDBOOKteam"
+quip_id: "HANDBOOKtm1"
+quip_url: "https://acme.quip.com/HANDBOOKtm1"
 quip_type: "document"
 created: "2026-01-08T09:00:00.000Z"
 updated: "2026-02-27T10:00:00.000Z"
@@ -78,7 +78,7 @@ make setup
 make dev   # then open the address it prints
 ```
 
-The old wiki is retired: [Company Wiki](https://acme.quip.com/ZZoutsideDoc/Company-Wiki) (that page is not part of this export).
+The old wiki is retired: [Company Wiki](https://acme.quip.com/OUTSIDEdoc1/Company-Wiki) (that page is not part of this export).
 
 > Office hours: Thursdays at 15:00, in person or on a call.
 

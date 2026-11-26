@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-// Makes examples/sample-output/: what the real command line tool writes for the made-up demo account (tests/mock/demo.ts).
+// Makes examples/sample-output/: what the real command line tool writes for the made-up demo account (src/demo/account.ts).
 // Nothing in it comes from a real account. The clock and the time zone are fixed, so the same code always makes the same files.
 //
 //   npm run sample          write the sample

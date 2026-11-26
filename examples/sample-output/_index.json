@@ -5,7 +5,7 @@
  "site": "https://acme.quip.com",
  "documents": [
   {
-   "id": "SCRATCHpad01",
+   "id": "SCRATCHpad1",
    "title": "Scratchpad",
    "type": "document",
    "path": "_Unfiled/Scratchpad.md",
@@ -13,10 +13,10 @@
    "created": "2026-03-03T08:00:00.000Z",
    "updated": "2026-03-03T08:20:00.000Z",
    "author": "Jane Doe",
-   "url": "https://acme.quip.com/SCRATCHpad01"
+   "url": "https://acme.quip.com/SCRATCHpad1"
   },
   {
-   "id": "PLANNING2025",
+   "id": "PLAN2025old",
    "title": "2025 Planning",
    "type": "document",
    "path": "Archive/2025 Planning.md",
@@ -24,7 +24,7 @@
    "created": "2026-01-06T09:00:00.000Z",
    "updated": "2026-01-06T12:00:00.000Z",
    "author": "Jane Doe",
-   "url": "https://acme.quip.com/PLANNING2025",
+   "url": "https://acme.quip.com/PLAN2025old",
    "embeds": [
     "spreadsheet"
    ],
@@ -33,7 +33,7 @@
    ]
   },
   {
-   "id": "WELCOMEdemo1",
+   "id": "WELCOMEdemo",
    "title": "Welcome to the Quipendo demo",
    "type": "document",
    "path": "Private/Welcome to the Quipendo demo.md",
@@ -44,7 +44,7 @@
    "created": "2026-01-05T09:00:00.000Z",
    "updated": "2026-03-01T08:00:00.000Z",
    "author": "Jane Doe",
-   "url": "https://acme.quip.com/WELCOMEdemo1"
+   "url": "https://acme.quip.com/WELCOMEdemo"
   },
   {
    "id": "SOURDOUGHn1",
@@ -58,7 +58,7 @@
    "url": "https://acme.quip.com/SOURDOUGHn1"
   },
   {
-   "id": "MEALplanner1",
+   "id": "MEALplanner",
    "title": "Weekly Meal Planner",
    "type": "document",
    "path": "Private/Home/Weekly Meal Planner.md",
@@ -66,7 +66,7 @@
    "created": "2026-03-01T09:00:00.000Z",
    "updated": "2026-03-08T20:00:00.000Z",
    "author": "Jane Doe",
-   "url": "https://acme.quip.com/MEALplanner1",
+   "url": "https://acme.quip.com/MEALplanner",
    "embeds": [
     "spreadsheet"
    ],
@@ -75,7 +75,7 @@
    ]
   },
   {
-   "id": "BUDGET2026x1",
+   "id": "BUDGET2026x",
    "title": "Budget 2026",
    "type": "spreadsheet",
    "path": "Private/Projects/Budget 2026.md",
@@ -83,7 +83,7 @@
    "created": "2026-01-20T09:00:00.000Z",
    "updated": "2026-03-02T15:00:00.000Z",
    "author": "Jane Doe",
-   "url": "https://acme.quip.com/BUDGET2026x1",
+   "url": "https://acme.quip.com/BUDGET2026x",
    "embeds": [
     "spreadsheet"
    ],
@@ -92,7 +92,7 @@
    ]
   },
   {
-   "id": "KICKOFFdeck1",
+   "id": "KICKOFFdeck",
    "title": "Kickoff Deck",
    "type": "slides",
    "path": "Private/Projects/Website Relaunch/Kickoff Deck.md",
@@ -100,13 +100,13 @@
    "created": "2026-02-27T09:00:00.000Z",
    "updated": "2026-03-02T09:00:00.000Z",
    "author": "Jane Doe",
-   "url": "https://acme.quip.com/KICKOFFdeck1",
+   "url": "https://acme.quip.com/KICKOFFdeck",
    "files": [
     "Private/Projects/Website Relaunch/Kickoff Deck.pdf"
    ]
   },
   {
-   "id": "LAUNCHlist01",
+   "id": "LAUNCHlist1",
    "title": "Launch Checklist",
    "type": "document",
    "path": "Private/Projects/Website Relaunch/Launch Checklist.md",
@@ -114,7 +114,7 @@
    "created": "2026-02-20T09:00:00.000Z",
    "updated": "2026-03-03T11:00:00.000Z",
    "author": "Jane Doe",
-   "url": "https://acme.quip.com/LAUNCHlist01",
+   "url": "https://acme.quip.com/LAUNCHlist1",
    "embeds": [
     "countdown"
    ]
@@ -137,7 +137,7 @@
    ]
   },
   {
-   "id": "LISBONtrip01",
+   "id": "LISBONtrip1",
    "title": "Lisbon Weekend",
    "type": "document",
    "path": "Private/Travel/Lisbon Weekend.md",
@@ -145,7 +145,7 @@
    "created": "2026-02-14T09:00:00.000Z",
    "updated": "2026-03-04T21:00:00.000Z",
    "author": "Jane Doe",
-   "url": "https://acme.quip.com/LISBONtrip01",
+   "url": "https://acme.quip.com/LISBONtrip1",
    "embeds": [
     "calendar",
     "spreadsheet",
@@ -156,7 +156,7 @@
    ]
   },
   {
-   "id": "HANDBOOKteam",
+   "id": "HANDBOOKtm1",
    "title": "Team Handbook",
    "type": "document",
    "path": "Team Shared/Team Handbook.md",
@@ -164,7 +164,7 @@
    "created": "2026-01-08T09:00:00.000Z",
    "updated": "2026-02-27T10:00:00.000Z",
    "author": "Bob Stone",
-   "url": "https://acme.quip.com/HANDBOOKteam",
+   "url": "https://acme.quip.com/HANDBOOKtm1",
    "embeds": [
     "process_bar",
     "salesforce_list",
@@ -177,7 +177,7 @@
    ]
   },
   {
-   "id": "RETROsprint1",
+   "id": "RETROsprint",
    "title": "Retro: Sprint 12",
    "type": "document",
    "path": "Team Shared/Meeting Notes/Retro - Sprint 12.md",
@@ -185,14 +185,14 @@
    "created": "2026-03-02T15:00:00.000Z",
    "updated": "2026-03-03T09:00:00.000Z",
    "author": "Carlos Mendes",
-   "url": "https://acme.quip.com/RETROsprint1",
+   "url": "https://acme.quip.com/RETROsprint",
    "embeds": [
     "countdown",
     "kanban"
    ]
   },
   {
-   "id": "WEEKLYsync01",
+   "id": "WEEKLYsync1",
    "title": "Weekly Sync: 4 March 2026",
    "type": "document",
    "path": "Team Shared/Meeting Notes/Weekly Sync - 4 March 2026.md",
@@ -200,7 +200,7 @@
    "created": "2026-03-04T10:00:00.000Z",
    "updated": "2026-03-04T12:15:00.000Z",
    "author": "Ann Lee",
-   "url": "https://acme.quip.com/WEEKLYsync01",
+   "url": "https://acme.quip.com/WEEKLYsync1",
    "embeds": [
     "poll"
    ]

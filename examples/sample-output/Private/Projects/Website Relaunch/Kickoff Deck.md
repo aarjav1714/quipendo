@@ -1,7 +1,7 @@
 ---
 title: "Kickoff Deck"
-quip_id: "KICKOFFdeck1"
-quip_url: "https://acme.quip.com/KICKOFFdeck1"
+quip_id: "KICKOFFdeck"
+quip_url: "https://acme.quip.com/KICKOFFdeck"
 quip_type: "slides"
 created: "2026-02-27T09:00:00.000Z"
 updated: "2026-03-02T09:00:00.000Z"

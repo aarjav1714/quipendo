@@ -1,7 +1,7 @@
 ---
 title: "Retro: Sprint 12"
-quip_id: "RETROsprint1"
-quip_url: "https://acme.quip.com/RETROsprint1"
+quip_id: "RETROsprint"
+quip_url: "https://acme.quip.com/RETROsprint"
 quip_type: "document"
 created: "2026-03-02T15:00:00.000Z"
 updated: "2026-03-03T09:00:00.000Z"

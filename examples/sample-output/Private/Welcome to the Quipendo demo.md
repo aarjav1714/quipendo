@@ -1,7 +1,7 @@
 ---
 title: "Welcome to the Quipendo demo"
-quip_id: "WELCOMEdemo1"
-quip_url: "https://acme.quip.com/WELCOMEdemo1"
+quip_id: "WELCOMEdemo"
+quip_url: "https://acme.quip.com/WELCOMEdemo"
 quip_type: "document"
 created: "2026-01-05T09:00:00.000Z"
 updated: "2026-03-01T08:00:00.000Z"

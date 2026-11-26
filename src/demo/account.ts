@@ -22,22 +22,23 @@ export const F_TRAVEL = 'fTRAVEL0001';
 export const F_HOME = 'fHOME000001';
 export const F_MEETINGS = 'fMEETINGS01';
 
-// Thread ids are 11 or 12 letters and digits, with a capital letter in them, as Quip's are.
-export const T_WELCOME = 'WELCOMEdemo1';
+// A thread id is 11 letters and digits with a capital letter in them, as Quip's are. (An address is cut to 11 characters to find
+// the document, so a longer id here could be listed and exported but never previewed from its address.)
+export const T_WELCOME = 'WELCOMEdemo';
 export const T_PLAN = 'RELAUNCHpl1';
-export const T_CHECKLIST = 'LAUNCHlist01';
-export const T_DECK = 'KICKOFFdeck1';
-export const T_BUDGET = 'BUDGET2026x1';
-export const T_LISBON = 'LISBONtrip01';
-export const T_MEALS = 'MEALplanner1';
+export const T_CHECKLIST = 'LAUNCHlist1';
+export const T_DECK = 'KICKOFFdeck';
+export const T_BUDGET = 'BUDGET2026x';
+export const T_LISBON = 'LISBONtrip1';
+export const T_MEALS = 'MEALplanner';
 export const T_BREAD = 'SOURDOUGHn1';
-export const T_SYNC = 'WEEKLYsync01';
-export const T_RETRO = 'RETROsprint1';
-export const T_HANDBOOK = 'HANDBOOKteam';
-export const T_OLD_PLAN = 'PLANNING2025';
-export const T_SCRATCH = 'SCRATCHpad01';
+export const T_SYNC = 'WEEKLYsync1';
+export const T_RETRO = 'RETROsprint';
+export const T_HANDBOOK = 'HANDBOOKtm1';
+export const T_OLD_PLAN = 'PLAN2025old';
+export const T_SCRATCH = 'SCRATCHpad1';
 /** A document that is not in the demo account, which the handbook still links to. */
-const T_WIKI = 'ZZoutsideDoc';
+const T_WIKI = 'OUTSIDEdoc1';
 
 const B_ARCH = 'IMGarch00001';
 const B_WIRE = 'IMGwire00001';

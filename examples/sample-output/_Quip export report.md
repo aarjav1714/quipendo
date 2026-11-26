@@ -27,4 +27,4 @@
 
 These links point back to Quip and will stop working when Quip is retired:
 
-- `ZZoutsideDoc`
+- `OUTSIDEdoc1`

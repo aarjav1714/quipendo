@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { QuipClient } from '../../src/core/quipClient';
-import { buildDemoFixture } from '../../src/demo/account';
+import { quipIdFrom } from '../../src/core/roots';
+import { buildDemoFixture, demoDocuments } from '../../src/demo/account';
 import { createDemoFetch, DEMO_TOKEN } from '../../src/demo/api';
 import { SITE } from '../../src/demo/model';
 
@@ -45,14 +46,14 @@ describe('the demo account', () => {
   });
 
   it('serves real files: spreadsheets with their formulas, slides as a PDF, Word copies, pictures', async () => {
-    const xlsx = new Uint8Array(await (await get('/1/threads/BUDGET2026x1/export/xlsx')).arrayBuffer());
+    const xlsx = new Uint8Array(await (await get('/1/threads/BUDGET2026x/export/xlsx')).arrayBuffer());
     expect(startsWith(xlsx, 'PK')).toBe(true);
     expect(new TextDecoder().decode(xlsx)).toContain('<f>SUM(B2:B6)</f>');
-    const pdf = new Uint8Array(await (await get('/1/threads/KICKOFFdeck1/export/pdf')).arrayBuffer());
+    const pdf = new Uint8Array(await (await get('/1/threads/KICKOFFdeck/export/pdf')).arrayBuffer());
     expect(startsWith(pdf, '%PDF-1.4')).toBe(true);
     const docx = new Uint8Array(await (await get('/1/threads/SOURDOUGHn1/export/docx')).arrayBuffer());
     expect(new TextDecoder().decode(docx)).toContain('Sourdough Notes');
-    const photo = await get('/1/blob/LISBONtrip01/IMGlisbon001');
+    const photo = await get('/1/blob/LISBONtrip1/IMGlisbon001');
     expect(photo.headers.get('content-type')).toBe('image/jpeg');
     expect(new Uint8Array(await photo.arrayBuffer())[0]).toBe(0xff);
   });
@@ -66,7 +67,7 @@ describe('the demo account', () => {
   });
 
   it('links only to things that exist: documents, pictures and attachments (apart from the one deliberate outside link)', () => {
-    const outside = new Set(['ZZoutsideDoc']);
+    const outside = new Set(['OUTSIDEdoc1']);
     for (const t of Object.values(fixture.threads)) {
       const html = t.pages.join('\n');
       for (const m of html.matchAll(new RegExp(`${SITE.replace(/[.]/g, '\\.')}/([A-Za-z0-9]{11,12})/`, 'g'))) {
@@ -86,6 +87,17 @@ describe('the demo account', () => {
     const inFolders = new Set(Object.values(fixture.folders).flatMap((f) => f.children.flatMap((c) => ('thread_id' in c ? [c.thread_id] : []))));
     const unfiled = Object.keys(fixture.threads).filter((id) => !inFolders.has(id));
     expect(unfiled.map((id) => fixture.threads[id]?.title)).toEqual(['Scratchpad']);
-    expect(fixture.owned).toContain('SCRATCHpad01');
+    expect(fixture.owned).toContain('SCRATCHpad1');
+  });
+
+  it('gives every document an 11-character id, so that each one the page offers can be previewed from its address', async () => {
+    const found = demoDocuments();
+    expect(found).toHaveLength(Object.keys(fixture.threads).length);
+    for (const t of Object.values(fixture.threads)) expect(t.id, t.title).toMatch(/^[A-Za-z0-9]{11}$/);
+    for (const { title, url } of found) {
+      const id = quipIdFrom(url) ?? '';
+      expect(fixture.threads[id], `${title}: ${url}`).toBeDefined();
+      expect((await get(`/2/threads/${id}`)).status, title).toBe(200);
+    }
   });
 });

@@ -1,7 +1,7 @@
 ---
 title: "Weekly Sync: 4 March 2026"
-quip_id: "WEEKLYsync01"
-quip_url: "https://acme.quip.com/WEEKLYsync01"
+quip_id: "WEEKLYsync1"
+quip_url: "https://acme.quip.com/WEEKLYsync1"
 quip_type: "document"
 created: "2026-03-04T10:00:00.000Z"
 updated: "2026-03-04T12:15:00.000Z"

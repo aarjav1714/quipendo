@@ -1,7 +1,7 @@
 ---
 title: "Launch Checklist"
-quip_id: "LAUNCHlist01"
-quip_url: "https://acme.quip.com/LAUNCHlist01"
+quip_id: "LAUNCHlist1"
+quip_url: "https://acme.quip.com/LAUNCHlist1"
 quip_type: "document"
 created: "2026-02-20T09:00:00.000Z"
 updated: "2026-03-03T11:00:00.000Z"

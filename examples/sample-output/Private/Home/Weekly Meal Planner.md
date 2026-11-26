@@ -1,7 +1,7 @@
 ---
 title: "Weekly Meal Planner"
-quip_id: "MEALplanner1"
-quip_url: "https://acme.quip.com/MEALplanner1"
+quip_id: "MEALplanner"
+quip_url: "https://acme.quip.com/MEALplanner"
 quip_type: "document"
 created: "2026-03-01T09:00:00.000Z"
 updated: "2026-03-08T20:00:00.000Z"

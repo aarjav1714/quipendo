@@ -1,7 +1,7 @@
 ---
 title: "Scratchpad"
-quip_id: "SCRATCHpad01"
-quip_url: "https://acme.quip.com/SCRATCHpad01"
+quip_id: "SCRATCHpad1"
+quip_url: "https://acme.quip.com/SCRATCHpad1"
 quip_type: "document"
 created: "2026-03-03T08:00:00.000Z"
 updated: "2026-03-03T08:20:00.000Z"

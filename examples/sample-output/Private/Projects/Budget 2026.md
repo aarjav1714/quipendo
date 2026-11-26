@@ -1,7 +1,7 @@
 ---
 title: "Budget 2026"
-quip_id: "BUDGET2026x1"
-quip_url: "https://acme.quip.com/BUDGET2026x1"
+quip_id: "BUDGET2026x"
+quip_url: "https://acme.quip.com/BUDGET2026x"
 quip_type: "spreadsheet"
 created: "2026-01-20T09:00:00.000Z"
 updated: "2026-03-02T15:00:00.000Z"

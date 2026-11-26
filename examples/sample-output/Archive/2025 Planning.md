@@ -1,7 +1,7 @@
 ---
 title: "2025 Planning"
-quip_id: "PLANNING2025"
-quip_url: "https://acme.quip.com/PLANNING2025"
+quip_id: "PLAN2025old"
+quip_url: "https://acme.quip.com/PLAN2025old"
 quip_type: "document"
 created: "2026-01-06T09:00:00.000Z"
 updated: "2026-01-06T12:00:00.000Z"
