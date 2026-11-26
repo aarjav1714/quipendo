@@ -4,7 +4,7 @@ For reviewers (for example at addons.mozilla.org) who need to reproduce a submit
 
 **Tested on:** macOS 27 and Ubuntu (GitHub Actions `ubuntu-latest`), with Node.js 22.17 and npm 10.9. Nothing else needs installing: esbuild and TypeScript come from `package-lock.json`.
 
-**No third-party code is in the extension.** The package is built from the first-party files under `src/` only (38 files); the one runtime dependency in `package.json`, `jsdom`, is used by the command line tool and is not bundled into the extension.
+**No third-party code is in the extension.** The package is built from the first-party files under `src/` only (esbuild's metafile lists every input, and none is under `node_modules`); the one runtime dependency in `package.json`, `jsdom`, is used by the command line tool and is not bundled into the extension.
 
 ## Build the Firefox package
 
