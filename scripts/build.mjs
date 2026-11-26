@@ -38,6 +38,8 @@ async function buildTarget(target) {
   await writeFile(`${outdir}/manifest.json`, `${JSON.stringify(manifest, null, 2)}\n`);
   for (const file of ['exporter.html', 'exporter.css']) await copyFile(`${root}extension/${file}`, `${outdir}/${file}`);
   await cp(`${root}extension/icons`, `${outdir}/icons`, { recursive: true });
+  // The Mac app that holds the Safari extension takes its icon from the largest one declared (see targets.mjs).
+  if (target === 'safari') await copyFile(`${root}assets/safari-app-icon-1024.png`, `${outdir}/icons/icon-1024.png`);
   // The page header shows the wordmark: one version for a light page and one for a dark page.
   for (const file of ['wordmark-on-light.svg', 'wordmark-on-dark.svg']) await copyFile(`${root}assets/${file}`, `${outdir}/${file}`);
 

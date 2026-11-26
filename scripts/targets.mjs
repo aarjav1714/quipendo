@@ -51,6 +51,9 @@ export function manifestFor(target, base, { e2e = false } = {}) {
   } else if (target === 'safari') {
     manifest.background = { scripts: ['background.js'] };
     manifest.browser_specific_settings = { safari: { strict_min_version: SAFARI_MIN_VERSION } };
+    // Apple's converter makes the Mac app's icon from the largest icon in the manifest and recommends a 1024 px one (WWDC20, "Meet
+    // Safari Web Extensions"); the other icons stop at 128 px, which would be blown up for the Dock and the App Store.
+    manifest.icons = { ...manifest.icons, 1024: 'icons/icon-1024.png' };
     // Safari never applies request-blocking rules to an extension's own requests (see src/ui/guard.ts), so asking for the permission would only worry the user.
     manifest.permissions = manifest.permissions.filter((permission) => permission !== 'declarativeNetRequest');
   }

@@ -44,9 +44,20 @@ open ~/quipendo-safari/Quipendo/Quipendo.xcodeproj
 
 In Xcode choose your team (or *Sign to Run Locally*), run the *Quipendo* scheme, then enable the extension in Safari's Settings → Extensions. Xcode on that Mac must have finished its first-launch setup (`xcodebuild -runFirstLaunch`, which needs an administrator), or the converter stops with "A required plugin failed to load".
 
-These commands come from Apple's documentation. They could not be run on the Mac this was developed on, because Xcode there had not finished that setup, so the CI workflow's **Safari package** job is where they run (it converts and builds without signing, on a macOS runner).
+These commands come from Apple's documentation. They could not be run on the Mac this was developed on, because Xcode there had not finished that setup, so the CI workflow's **Safari package** job runs them on every push: it converts and builds without signing, on a macOS runner with Xcode 26.6, and passes. (Its first runs are why the identifier below has to end in the app name.)
 
 `io.github.aarjav1714.Quipendo` is the identifier this project uses; if you ship your own copy, use one you own. The last part must be the app name exactly: the converter builds the app's identifier from the app name and the extension's from the one you pass, and Xcode refuses an extension whose identifier does not start with its app's ("Embedded binary's bundle identifier is not prefixed with the parent app's"). Giving the extension to other people means signing it: the Mac App Store or a notarized download, both of which need Apple's paid developer program. That is the one step that cannot be done from this repository.
+
+## Publish it without Xcode
+
+Apple's Safari web extension packager builds the app around the extension for you, from App Store Connect in any browser ([Apple's guide](https://developer.apple.com/documentation/safariservices/packaging-and-distributing-safari-web-extensions-with-app-store-connect)). It needs the paid Apple Developer Program and a zip of the Safari build: `quipendo-safari-<version>.zip` on each [release](https://github.com/aarjav1714/quipendo/releases), or `npm run build:safari && (cd dist-safari && zip -r -X ../quipendo-safari.zip .)`.
+
+1. In App Store Connect, add a new app (Apps → +): the platform (macOS, and iOS if you want it), a name, a bundle ID you own and a SKU.
+2. Users and Access → Xcode Cloud tab → Safari Web Extension Packager → Upload, and choose the zip. Packaging uses some of the 25 Xcode Cloud hours a month the membership includes, and reports any API Safari does not support.
+3. Fill in the app's page: the five 1280 x 800 `screenshot-*.jpg` from [`assets/store/`](../assets/store) (a size the Mac App Store takes), the privacy policy `https://github.com/aarjav1714/quipendo/blob/main/PRIVACY.md`, a support URL (`https://github.com/aarjav1714/quipendo/issues`), the category (Productivity) and the description from [chrome-web-store.md](chrome-web-store.md). Answer the privacy questionnaire yourself, on these facts: nothing goes to the developer or to any analytics, and the Quip token and documents travel only between the user's Mac and Quip's own API.
+4. Send the build to testers with TestFlight, or add it to the app's version and submit it for review. Reviewers cannot sign in to Quip, so give them the built-in demo: [reviewing.md](reviewing.md) has the wording for *App Review → Notes*.
+
+This route is from Apple's documentation. It has not been run for this project, because it needs the account holder's own login.
 
 ## Check the page in WebKit, without a Mac
 

@@ -33,6 +33,15 @@ try {
   for (const size of [16, 32, 48, 128]) await writeFile(`${root}extension/icons/icon-${size}.png`, await renderLogo(size));
   await writeFile(`${root}assets/logo-512.png`, await renderLogo(512));
 
+  // The Mac app that holds the Safari extension takes its icon from the largest one in the manifest. macOS draws app icons at
+  // 80% of a 1024x1024 canvas, so the artwork is inset the same way. Only the Safari build ships it.
+  await page.setViewportSize({ width: 1024, height: 1024 });
+  await page.setContent(
+    `<!doctype html><body style="margin:0;background:transparent"><img id="logo" width="832" height="832" style="display:block;margin:96px" src="data:image/svg+xml;base64,${Buffer.from(logo).toString('base64')}">`,
+  );
+  await page.evaluate(() => document.getElementById('logo').decode());
+  await writeFile(`${root}assets/safari-app-icon-1024.png`, await page.screenshot({ type: 'png', omitBackground: true, clip: { x: 0, y: 0, width: 1024, height: 1024 } }));
+
   // The Chrome Web Store listing asks for the artwork at 96x96 inside the 128x128 image, with 16 px of transparent
   // padding all round, so the icon looks as big as the others on the page. The packaged icon-128.png fills its square.
   await mkdir(`${root}assets/store`, { recursive: true });
@@ -50,4 +59,4 @@ try {
 } finally {
   await browser.close();
 }
-console.log('Wrote extension/icons/icon-{16,32,48,128}.png, assets/store/store-icon-128.png, assets/logo-512.png and assets/social-preview.png');
+console.log('Wrote extension/icons/icon-{16,32,48,128}.png, assets/store/store-icon-128.png, assets/logo-512.png, assets/safari-app-icon-1024.png and assets/social-preview.png');
