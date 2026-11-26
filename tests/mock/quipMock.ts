@@ -103,7 +103,10 @@ export async function startMockQuip(opts: MockOptions = {}): Promise<MockQuip> {
     if (!f) return undefined;
     return { folder: { id: f.id, title: f.title, creator_id: ME.id, folder_class: 'standard' }, member_ids: [ME.id], children: f.children };
   };
-  const userJson = (id: string): Record<string, unknown> | undefined => [ME, ANN, BOB].find((u) => u.id === id) && userInfo([ME, ANN, BOB].find((u) => u.id === id) as { id: string; name: string });
+  const userJson = (id: string): Record<string, unknown> | undefined => {
+    const person = [ME, ANN, BOB, ...(fx.users ?? [])].find((u) => u.id === id);
+    return person && userInfo(person);
+  };
 
   const cors = opts.cors ?? process.env.E2E_MOCK_CORS === '1';
 
@@ -221,15 +224,16 @@ export async function startMockQuip(opts: MockOptions = {}): Promise<MockQuip> {
     if ((m = /^\/1\/threads\/([\w-]+)\/export\/xlsx$/.exec(path))) {
       const t = fx.threads[m[1] as string];
       if (!t) return error(res, 404, 'not found');
-      return hasSheet(t) ? send(res, 200, XLSX_BYTES, { 'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }) : error(res, 400, 'thread has no spreadsheet');
+      return hasSheet(t) ? send(res, 200, t.exports?.xlsx ?? XLSX_BYTES, { 'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }) : error(res, 400, 'thread has no spreadsheet');
     }
     if ((m = /^\/1\/threads\/([\w-]+)\/export\/docx$/.exec(path))) {
       const t = fx.threads[m[1] as string];
       if (!t) return error(res, 404, 'not found');
-      return t.type === 'DOCUMENT' ? send(res, 200, DOCX_BYTES, { 'content-type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }) : error(res, 400, 'not a document');
+      return t.type === 'DOCUMENT' ? send(res, 200, t.exports?.docx ?? DOCX_BYTES, { 'content-type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }) : error(res, 400, 'not a document');
     }
     if ((m = /^\/1\/threads\/([\w-]+)\/export\/pdf$/.exec(path))) {
-      return fx.threads[m[1] as string]?.type === 'SLIDES' ? send(res, 200, new TextEncoder().encode('%PDF-1.4\n%slides\n'), { 'content-type': 'application/pdf' }) : error(res, 400, 'not a slide deck');
+      const t = fx.threads[m[1] as string];
+      return t?.type === 'SLIDES' ? send(res, 200, t.exports?.pdf ?? new TextEncoder().encode('%PDF-1.4\n%slides\n'), { 'content-type': 'application/pdf' }) : error(res, 400, 'not a slide deck');
     }
     return error(res, 404, `no route for ${path}`);
   };

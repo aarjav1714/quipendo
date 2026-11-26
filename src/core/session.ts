@@ -11,6 +11,8 @@ export interface SessionConfig {
   options?: Partial<ExportOptions>;
   signal?: AbortSignal;
   onEvent?: (event: ExportEvent) => void;
+  /** The clock for the "exported at" stamps. Tests and the sample-output script fix it so the files come out the same every time. */
+  now?: () => Date;
   /** Transport overrides, mainly for tests. */
   client?: Partial<Pick<ClientOptions, 'fetch' | 'sleep' | 'now' | 'minIntervalMs' | 'maxRetries' | 'messagePageSize'>>;
 }
@@ -34,6 +36,7 @@ export function createSession(cfg: SessionConfig): { client: QuipClient; exporte
       parseHtml: cfg.parseHtml,
       ...(cfg.onEvent ? { onEvent: cfg.onEvent } : {}),
       ...(cfg.signal ? { signal: cfg.signal } : {}),
+      ...(cfg.now ? { now: cfg.now } : {}),
     },
     cfg.options,
   );

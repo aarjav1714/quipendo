@@ -1,0 +1,85 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R 11 0 R 13 0 R] /Count 5 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 960 540] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 129 >>
+stream
+BT /F2 40 Tf 64 450 Td (Website Relaunch) Tj ET
+BT /F1 22 Tf 64 386 Td 30 TL (Kickoff, 2 March 2026) Tj T* (Acme Studio) Tj T* ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 960 540] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 8 0 R >>
+endobj
+8 0 obj
+<< /Length 163 >>
+stream
+BT /F2 40 Tf 64 450 Td (Goals) Tj ET
+BT /F1 22 Tf 64 386 Td 30 TL (Ship on 14 April) Tj T* (Keep the old URLs working) Tj T* (Cut the page weight in half) Tj T* ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 960 540] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 10 0 R >>
+endobj
+10 0 obj
+<< /Length 178 >>
+stream
+BT /F2 40 Tf 64 450 Td (Timeline) Tj ET
+BT /F1 22 Tf 64 386 Td 30 TL (March: design and build) Tj T* (April: soft launch, then launch) Tj T* (May: retire the old server) Tj T* ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 960 540] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 12 0 R >>
+endobj
+12 0 obj
+<< /Length 210 >>
+stream
+BT /F2 40 Tf 64 450 Td (Team) Tj ET
+BT /F1 22 Tf 64 386 Td 30 TL (Jane Doe: owner) Tj T* (Ann Lee: design) Tj T* (Carlos Mendes: engineering) Tj T* (Bob Stone: accounts) Tj T* (Priya Nair: photography) Tj T* ET
+endstream
+endobj
+13 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 960 540] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 14 0 R >>
+endobj
+14 0 obj
+<< /Length 175 >>
+stream
+BT /F2 40 Tf 64 450 Td (Risks) Tj ET
+BT /F1 22 Tf 64 386 Td 30 TL (Late content from the client) Tj T* (Redirects missed on launch day) Tj T* (Holiday cover in April) Tj T* ET
+endstream
+endobj
+xref
+0 15
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000141 00000 n 
+0000000211 00000 n 
+0000000286 00000 n 
+0000000422 00000 n 
+0000000602 00000 n 
+0000000738 00000 n 
+0000000952 00000 n 
+0000001089 00000 n 
+0000001319 00000 n 
+0000001457 00000 n 
+0000001719 00000 n 
+0000001857 00000 n 
+trailer
+<< /Size 15 /Root 1 0 R >>
+startxref
+2084
+%%EOF

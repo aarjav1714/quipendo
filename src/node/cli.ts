@@ -58,6 +58,9 @@ export interface CliDeps {
   signal?: AbortSignal;
   /** Transport overrides, for tests. */
   client?: SessionConfig['client'];
+  /** Fixed clock and time zone, so the sample output in the repository can be made again byte for byte. */
+  now?: () => Date;
+  timeZone?: string;
 }
 
 const isAbort = (err: unknown): boolean => err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError');
@@ -232,7 +235,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
       ...(sinceUsec !== undefined ? { sinceUsec } : {}),
       ...(excludeIds.length > 0 ? { excludeIds } : {}),
       ...(user.siteUrl ? { siteUrl: user.siteUrl } : {}),
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timeZone: deps.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
     };
 
     const sink = new NodeFsSink(outDir);
@@ -264,6 +267,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
       parseHtml: parseHtmlWithJsdom,
       options,
       onEvent,
+      ...(deps.now ? { now: deps.now } : {}),
       ...(deps.client ? { client: deps.client } : {}),
     });
 

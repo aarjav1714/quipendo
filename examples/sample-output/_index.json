@@ -1,0 +1,209 @@
+{
+ "kind": "quipendo-index",
+ "tool": "Quipendo 0.1.0",
+ "updated": "2026-03-06T09:30:00.000Z",
+ "site": "https://acme.quip.com",
+ "documents": [
+  {
+   "id": "SCRATCHpad01",
+   "title": "Scratchpad",
+   "type": "document",
+   "path": "_Unfiled/Scratchpad.md",
+   "folder": "_Unfiled",
+   "created": "2026-03-03T08:00:00.000Z",
+   "updated": "2026-03-03T08:20:00.000Z",
+   "author": "Jane Doe",
+   "url": "https://acme.quip.com/SCRATCHpad01"
+  },
+  {
+   "id": "PLANNING2025",
+   "title": "2025 Planning",
+   "type": "document",
+   "path": "Archive/2025 Planning.md",
+   "folder": "Archive",
+   "created": "2026-01-06T09:00:00.000Z",
+   "updated": "2026-01-06T12:00:00.000Z",
+   "author": "Jane Doe",
+   "url": "https://acme.quip.com/PLANNING2025",
+   "embeds": [
+    "spreadsheet"
+   ],
+   "files": [
+    "Archive/2025 Planning.xlsx"
+   ]
+  },
+  {
+   "id": "WELCOMEdemo1",
+   "title": "Welcome to the Quipendo demo",
+   "type": "document",
+   "path": "Private/Welcome to the Quipendo demo.md",
+   "folder": "Private",
+   "also_in": [
+    "Desktop"
+   ],
+   "created": "2026-01-05T09:00:00.000Z",
+   "updated": "2026-03-01T08:00:00.000Z",
+   "author": "Jane Doe",
+   "url": "https://acme.quip.com/WELCOMEdemo1"
+  },
+  {
+   "id": "SOURDOUGHn1",
+   "title": "Sourdough Notes",
+   "type": "document",
+   "path": "Private/Home/Sourdough Notes.md",
+   "folder": "Private/Home",
+   "created": "2026-01-30T09:00:00.000Z",
+   "updated": "2026-02-22T07:00:00.000Z",
+   "author": "Jane Doe",
+   "url": "https://acme.quip.com/SOURDOUGHn1"
+  },
+  {
+   "id": "MEALplanner1",
+   "title": "Weekly Meal Planner",
+   "type": "document",
+   "path": "Private/Home/Weekly Meal Planner.md",
+   "folder": "Private/Home",
+   "created": "2026-03-01T09:00:00.000Z",
+   "updated": "2026-03-08T20:00:00.000Z",
+   "author": "Jane Doe",
+   "url": "https://acme.quip.com/MEALplanner1",
+   "embeds": [
+    "spreadsheet"
+   ],
+   "files": [
+    "Private/Home/Weekly Meal Planner.xlsx"
+   ]
+  },
+  {
+   "id": "BUDGET2026x1",
+   "title": "Budget 2026",
+   "type": "spreadsheet",
+   "path": "Private/Projects/Budget 2026.md",
+   "folder": "Private/Projects",
+   "created": "2026-01-20T09:00:00.000Z",
+   "updated": "2026-03-02T15:00:00.000Z",
+   "author": "Jane Doe",
+   "url": "https://acme.quip.com/BUDGET2026x1",
+   "embeds": [
+    "spreadsheet"
+   ],
+   "files": [
+    "Private/Projects/Budget 2026.xlsx"
+   ]
+  },
+  {
+   "id": "KICKOFFdeck1",
+   "title": "Kickoff Deck",
+   "type": "slides",
+   "path": "Private/Projects/Website Relaunch/Kickoff Deck.md",
+   "folder": "Private/Projects/Website Relaunch",
+   "created": "2026-02-27T09:00:00.000Z",
+   "updated": "2026-03-02T09:00:00.000Z",
+   "author": "Jane Doe",
+   "url": "https://acme.quip.com/KICKOFFdeck1",
+   "files": [
+    "Private/Projects/Website Relaunch/Kickoff Deck.pdf"
+   ]
+  },
+  {
+   "id": "LAUNCHlist01",
+   "title": "Launch Checklist",
+   "type": "document",
+   "path": "Private/Projects/Website Relaunch/Launch Checklist.md",
+   "folder": "Private/Projects/Website Relaunch",
+   "created": "2026-02-20T09:00:00.000Z",
+   "updated": "2026-03-03T11:00:00.000Z",
+   "author": "Jane Doe",
+   "url": "https://acme.quip.com/LAUNCHlist01",
+   "embeds": [
+    "countdown"
+   ]
+  },
+  {
+   "id": "RELAUNCHpl1",
+   "title": "Website Relaunch: Project Plan",
+   "type": "document",
+   "path": "Private/Projects/Website Relaunch/Website Relaunch - Project Plan.md",
+   "folder": "Private/Projects/Website Relaunch",
+   "created": "2026-02-02T09:00:00.000Z",
+   "updated": "2026-03-05T17:30:00.000Z",
+   "author": "Jane Doe",
+   "url": "https://acme.quip.com/RELAUNCHpl1",
+   "embeds": [
+    "calendar",
+    "kanban",
+    "process_bar",
+    "project_tracker"
+   ]
+  },
+  {
+   "id": "LISBONtrip01",
+   "title": "Lisbon Weekend",
+   "type": "document",
+   "path": "Private/Travel/Lisbon Weekend.md",
+   "folder": "Private/Travel",
+   "created": "2026-02-14T09:00:00.000Z",
+   "updated": "2026-03-04T21:00:00.000Z",
+   "author": "Jane Doe",
+   "url": "https://acme.quip.com/LISBONtrip01",
+   "embeds": [
+    "calendar",
+    "spreadsheet",
+    "video"
+   ],
+   "files": [
+    "Private/Travel/Lisbon Weekend.xlsx"
+   ]
+  },
+  {
+   "id": "HANDBOOKteam",
+   "title": "Team Handbook",
+   "type": "document",
+   "path": "Team Shared/Team Handbook.md",
+   "folder": "Team Shared",
+   "created": "2026-01-08T09:00:00.000Z",
+   "updated": "2026-02-27T10:00:00.000Z",
+   "author": "Bob Stone",
+   "url": "https://acme.quip.com/HANDBOOKteam",
+   "embeds": [
+    "process_bar",
+    "salesforce_list",
+    "salesforce_record",
+    "spreadsheet",
+    "video"
+   ],
+   "files": [
+    "Team Shared/Team Handbook.xlsx"
+   ]
+  },
+  {
+   "id": "RETROsprint1",
+   "title": "Retro: Sprint 12",
+   "type": "document",
+   "path": "Team Shared/Meeting Notes/Retro - Sprint 12.md",
+   "folder": "Team Shared/Meeting Notes",
+   "created": "2026-03-02T15:00:00.000Z",
+   "updated": "2026-03-03T09:00:00.000Z",
+   "author": "Carlos Mendes",
+   "url": "https://acme.quip.com/RETROsprint1",
+   "embeds": [
+    "countdown",
+    "kanban"
+   ]
+  },
+  {
+   "id": "WEEKLYsync01",
+   "title": "Weekly Sync: 4 March 2026",
+   "type": "document",
+   "path": "Team Shared/Meeting Notes/Weekly Sync - 4 March 2026.md",
+   "folder": "Team Shared/Meeting Notes",
+   "created": "2026-03-04T10:00:00.000Z",
+   "updated": "2026-03-04T12:15:00.000Z",
+   "author": "Ann Lee",
+   "url": "https://acme.quip.com/WEEKLYsync01",
+   "embeds": [
+    "poll"
+   ]
+  }
+ ]
+}

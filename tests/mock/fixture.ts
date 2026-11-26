@@ -3,22 +3,16 @@
  * Shapes follow Quip's public Automation API specification; HTML shapes follow its documented
  * live-app examples. Nothing here comes from a real account.
  */
+import { ANN, BOB, F_ARCH, F_DESK, F_PRIV, F_SHARED, F_STAR, F_TRASH, ME, SITE, type Fixture, type FixtureFolder, type FixtureMessage, type FixtureThread } from '../../src/demo/model';
+
+// The people, the site and the folders every account has live with the demo account's model, so both use one definition.
+export { ANN, BOB, F_ARCH, F_DESK, F_PRIV, F_SHARED, F_STAR, F_TRASH, ME, SITE };
+export type { Fixture, FixtureBlob, FixtureFolder, FixtureMessage, FixtureThread } from '../../src/demo/model';
+
 export const TOKEN = 'test-token-123';
-export const SITE = 'https://acme.quip.com';
 
-export const ME = { id: 'uME00000001', name: 'Jane Doe' };
-export const ANN = { id: 'uANN0000001', name: 'Ann Lee' };
-/** Only ever mentioned in a comment, never an author. */
-export const BOB = { id: 'uBOB0000001', name: 'Bob Stone' };
-
-export const F_PRIV = 'fPRIVATE001';
 export const F_PROJ = 'fPROJECTS01';
-export const F_DESK = 'fDESKTOP001';
-export const F_SHARED = 'fSHARED0001';
 export const F_LOCKED = 'fLOCKED0001';
-export const F_ARCH = 'fARCHIVE001';
-export const F_STAR = 'fSTARRED001';
-export const F_TRASH = 'fTRASH00001';
 export const F_OTHER = 'fOTHERSHR01';
 
 export const T_READING = 'tREADINGth1';
@@ -42,49 +36,6 @@ export const T_DIRECT = 'DIRECTthrd01';
 export const B_OK = 'BLOBok00001';
 export const B_GONE = 'BLOBgone001';
 export const B_FILE = 'BLOBfile001';
-
-export interface FixtureMessage {
-  id: string;
-  author_id: string;
-  author_name: string;
-  created_usec: number;
-  text: string;
-  mention_user_ids?: string[];
-  annotation?: { id: string; highlighted_section_ids?: string[] };
-  files?: Array<{ hash: string; name: string }>;
-}
-
-export interface FixtureThread {
-  id: string;
-  title: string;
-  type: 'DOCUMENT' | 'SPREADSHEET' | 'SLIDES' | 'CHAT';
-  secret?: string;
-  authorId: string;
-  created: number;
-  updated: number;
-  pages: string[];
-  messages?: FixtureMessage[];
-  /** Document edit records, returned for `message_type=edit`. */
-  edits?: Array<{ id: string; created_usec: number } & Record<string, unknown>>;
-  movedTo?: string;
-}
-
-export interface FixtureFolder {
-  id: string;
-  title: string;
-  children: Array<{ folder_id: string } | { thread_id: string }>;
-}
-
-export type FixtureBlob = { type: string; bytes: Uint8Array } | { forbidden: true };
-
-export interface Fixture {
-  folders: Record<string, FixtureFolder>;
-  threads: Record<string, FixtureThread>;
-  blobs: Record<string, FixtureBlob>;
-  /** Threads the user owns, returned by /1/users/current/threads. */
-  owned: string[];
-  restrictedFolders: string[];
-}
 
 export const PNG_1X1 = Uint8Array.from(
   Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'),
