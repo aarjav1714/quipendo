@@ -100,10 +100,12 @@ jobs:
       - run: npm ci
       - run: npm run build:safari
       - name: Convert it to an Xcode project
+        # The identifier must end in the app name: the converter derives the app's identifier from the name and the
+        # extension's from this value, and Xcode rejects an extension that is not prefixed with its app's.
         run: |
           xcrun safari-web-extension-converter dist-safari \
             --project-location "$RUNNER_TEMP/safari" --app-name Quipendo \
-            --bundle-identifier io.github.aarjav1714.quipendo \
+            --bundle-identifier io.github.aarjav1714.Quipendo \
             --macos-only --no-open --no-prompt --copy-resources
       - name: Build it without signing
         # With --macos-only the project has one scheme, named after the app (an iOS target would add "(macOS)" and "(iOS)").

@@ -37,16 +37,16 @@ Safari extensions that stay installed, and the ones other people use, are shippe
 npm run build:safari
 xcrun safari-web-extension-converter dist-safari \
   --project-location ~/quipendo-safari --app-name Quipendo \
-  --bundle-identifier io.github.aarjav1714.quipendo \
+  --bundle-identifier io.github.aarjav1714.Quipendo \
   --macos-only --no-prompt --copy-resources
 open ~/quipendo-safari/Quipendo/Quipendo.xcodeproj
 ```
 
-In Xcode choose your team (or *Sign to Run Locally*), run the *Quipendo (macOS)* scheme, then enable the extension in Safari's Settings → Extensions. Xcode on that Mac must have finished its first-launch setup (`xcodebuild -runFirstLaunch`, which needs an administrator), or the converter stops with "A required plugin failed to load".
+In Xcode choose your team (or *Sign to Run Locally*), run the *Quipendo* scheme, then enable the extension in Safari's Settings → Extensions. Xcode on that Mac must have finished its first-launch setup (`xcodebuild -runFirstLaunch`, which needs an administrator), or the converter stops with "A required plugin failed to load".
 
-These commands come from Apple's documentation. They could not be run on the Mac this was developed on, because Xcode there had not finished that setup, so the CI workflow's **Safari package** job is the first place they run (it converts and builds without signing, on a macOS runner).
+These commands come from Apple's documentation. They could not be run on the Mac this was developed on, because Xcode there had not finished that setup, so the CI workflow's **Safari package** job is where they run (it converts and builds without signing, on a macOS runner).
 
-`io.github.aarjav1714.quipendo` is a placeholder; use an identifier you own. Giving the extension to other people means signing it: the Mac App Store or a notarized download, both of which need Apple's paid developer program. That is the one step that cannot be done from this repository.
+`io.github.aarjav1714.Quipendo` is the identifier this project uses; if you ship your own copy, use one you own. The last part must be the app name exactly: the converter builds the app's identifier from the app name and the extension's from the one you pass, and Xcode refuses an extension whose identifier does not start with its app's ("Embedded binary's bundle identifier is not prefixed with the parent app's"). Giving the extension to other people means signing it: the Mac App Store or a notarized download, both of which need Apple's paid developer program. That is the one step that cannot be done from this repository.
 
 ## Check the page in WebKit, without a Mac
 
