@@ -28,7 +28,7 @@ const TYPES: Record<string, string> = {
  */
 export class WebKitDriver implements E2EDriver {
   readonly name = 'webkit' as const;
-  readonly can: Capabilities = { folder: false, guard: false, background: false, unpermittedReads: false, revocableAccess: false };
+  readonly can: Capabilities = { folder: false, guard: false, background: false, unpermittedReads: false, revocableAccess: false, spacesInDownloadNames: process.platform !== 'linux' };
   private browser!: Browser;
   private context!: BrowserContext;
   private server!: Server;

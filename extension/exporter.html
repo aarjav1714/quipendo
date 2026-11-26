@@ -31,6 +31,9 @@
           deletes files from your target folder.
         </p>
         <p id="guard-status" class="status" data-tone="info"></p>
+        <p id="demo-banner" class="status" role="status" data-tone="info" hidden>
+          <strong>Demo.</strong> This is a made-up account. Nothing is read from or sent to Quip, and nothing in it is real.
+        </p>
       </header>
 
       <section id="step-connect">
@@ -38,7 +41,8 @@
         <p class="hint">
           Create a personal access token at
           <a href="https://quip.com/dev/token" target="_blank" rel="noreferrer noopener">quip.com/dev/token</a> while signed in, and paste it
-          here. It is only ever sent to Quip.
+          here. It is only ever sent to Quip. Quipendo reads your documents from Quip to convert them and saves the result only on this
+          computer; nothing goes to the developer or to anyone else.
         </p>
         <div class="row">
           <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Quip access token" aria-label="Quip access token" />
@@ -46,6 +50,13 @@
           <button id="btn-forget" type="button" title="Remove the token from this page and from the browser's storage">Forget token</button>
         </div>
         <label class="check"><input id="remember" type="checkbox" /><span>Remember the token on this computer</span></label>
+        <div class="row demo-row">
+          <button id="btn-demo" type="button">Try the demo</button>
+          <span class="hint">
+            No Quip account, or just looking? The demo opens a made-up account with documents of every kind. It runs inside this page and
+            contacts no one.
+          </span>
+        </div>
         <p id="access-notice" class="status" role="status" data-tone="warn" hidden></p>
         <p id="connect-status" class="status" role="status" data-tone="info"></p>
       </section>
@@ -57,7 +68,8 @@
           export saves them). Needs the connection above; no folder.
         </p>
         <div class="row">
-          <input id="preview-url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://your-site.quip.com/…" aria-label="Quip document address" />
+          <input id="preview-url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://your-site.quip.com/…" aria-label="Quip document address" list="demo-docs" />
+          <datalist id="demo-docs"></datalist>
           <button id="btn-preview" type="button">Preview</button>
         </div>
         <p id="preview-status" class="status" role="status" data-tone="info"></p>

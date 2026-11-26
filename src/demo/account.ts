@@ -63,6 +63,17 @@ const link = (id: string, slug: string): string => `${SITE}/${id}/${slug}`;
 const ref = (id: string, slug: string, text: string): string => `<a href='${link(id, slug)}'>${text}</a>`;
 const mentionUrl = (person: { id: string }): string => `${SITE}/${person.id}`;
 
+/** The address the page offers to preview first: the document with the most kinds of content in it. */
+export const DEMO_START_URL = link(T_PLAN, 'Website-Relaunch-Project-Plan');
+
+let built: Fixture | undefined;
+
+/** The demo's documents by title and Quip address, for the list the page offers to choose from. */
+export function demoDocuments(): Array<{ title: string; url: string }> {
+  built ??= buildDemoFixture();
+  return Object.values(built.threads).map((t) => ({ title: t.title, url: link(t.id, t.title.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')) }));
+}
+
 function sheetTable(title: string, rows: string[][], cell: (text: string, r: number, c: number) => string): string {
   const letters = rows[0]?.map((_, i) => String.fromCharCode(65 + i)) ?? [];
   const head = `<thead><tr><th></th>${letters.map((l) => `<th>${l}</th>`).join('')}</tr></thead>`;
@@ -318,7 +329,7 @@ function lisbon(): string {
   const b = html('ls');
   return [
     b.h(1, 'Lisbon Weekend'),
-    b.p("<i>Three days, no alarm clocks.</i> We land on Friday 13 March and fly home on Sunday evening. Most of it is walking: start in <a href='https://en.wikipedia.org/wiki/Alfama'>Alfama</a> and let the hills decide."),
+    b.p("<i>Three days, no alarm clocks.</i> We land on Friday 13 March and fly home on Sunday evening. Most of it is walking: start in <a href='https://example.com/lisbon/alfama'>Alfama</a> and let the hills decide."),
     b.image(T_LISBON, B_LISBON, 'Rooftops and a yellow tram at sunset', 'Golden hour over Alfama (an illustration)'),
     b.h(2, 'Itinerary'),
     b.sheet('Itinerary', ITINERARY_ROWS, { italic: [[2, 1]] }),
@@ -392,7 +403,7 @@ function bread(): string {
     b.hr(),
     b.h(2, 'Feeding schedule'),
     b.pre('# morning feed\n06:30  discard all but 20 g\n06:35  add 100 g flour and 100 g water\n06:40  stir, mark the jar, loosen the lid\n\n# before baking\n18:00  feed again, use when doubled'),
-    b.p("Read more on <a href='https://en.wikipedia.org/wiki/Sourdough'>Wikipedia</a>, or write to <a href='mailto:baker@example.com'>baker@example.com</a>."),
+    b.p("Read more in <a href='https://example.com/baking/sourdough'>the baking guide</a>, or write to <a href='mailto:baker@example.com'>baker@example.com</a>."),
   ].join('\n');
 }
 
@@ -477,7 +488,7 @@ function handbook(): string {
     b.h(2, 'Welcome video'),
     b.video('https://example.com/videos/welcome-to-acme'),
     b.h(2, 'Dev setup'),
-    b.pre('git clone git@example.com:acme/website.git\ncd website\nmake setup\nmake dev   # http://localhost:3000'),
+    b.pre('git clone git@example.com:acme/website.git\ncd website\nmake setup\nmake dev   # then open the address it prints'),
     b.p(`The old wiki is retired: ${ref(T_WIKI, 'Company-Wiki', 'Company Wiki')} (that page is not part of this export).`),
     b.quote('Office hours: Thursdays at 15:00, in person or on a call.'),
   ].join('\n');

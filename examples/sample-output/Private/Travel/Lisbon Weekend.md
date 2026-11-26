@@ -17,7 +17,7 @@ exporter: "Quipendo 0.1.0"
 
 # Lisbon Weekend
 
-*Three days, no alarm clocks.* We land on Friday 13 March and fly home on Sunday evening. Most of it is walking: start in [Alfama](https://en.wikipedia.org/wiki/Alfama) and let the hills decide.
+*Three days, no alarm clocks.* We land on Friday 13 March and fly home on Sunday evening. Most of it is walking: start in [Alfama](https://example.com/lisbon/alfama) and let the hills decide.
 
 ![Rooftops and a yellow tram at sunset](../../_attachments/LISBONtrip01/IMGlisbon001.jpg)
 

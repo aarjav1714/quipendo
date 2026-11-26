@@ -45,6 +45,8 @@ export interface Capabilities {
   unpermittedReads: boolean;
   /** A test can withdraw the extension's access to a site and let the page ask for it again. */
   revocableAccess: boolean;
+  /** A saved file's suggested name keeps its spaces. (Playwright's WebKit on Linux turns each into an underscore.) */
+  spacesInDownloadNames: boolean;
 }
 
 export type BrowserName = 'chromium' | 'firefox' | 'webkit' | 'safari';

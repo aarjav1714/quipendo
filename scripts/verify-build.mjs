@@ -9,6 +9,11 @@ const flag = (name) => {
 };
 const requested = process.argv.includes('--all') ? targetNames : [parseTarget(flag('--target') ?? 'chrome')];
 
+// Quip's own hosts are the only ones the code ever contacts. These two appear only as text and are never requested:
+// example.com is the address documentation is meant to use (the made-up demo documents mention it), and the OOXML namespace
+// is a name written inside the .xlsx and .docx files the demo hands out, not an address.
+const TEXT_ONLY_HOSTS = new Set(['example.com', 'schemas.openxmlformats.org']);
+
 // One version number: the extension, the npm package and the tool name written into every export must agree.
 const pkg = JSON.parse(await readFile(`${root}package.json`, 'utf8'));
 const toolVersion = /export const TOOL_VERSION = '([^']+)'/.exec(await readFile(`${root}src/core/exporter.ts`, 'utf8'))?.[1];
@@ -48,7 +53,7 @@ async function verify(target) {
     if (gecko?.id !== GECKO_ID) fail(`gecko id must be ${GECKO_ID}`);
     if (gecko?.strict_min_version !== GECKO_MIN_VERSION) fail(`gecko strict_min_version must be ${GECKO_MIN_VERSION}`);
     if (manifest.browser_specific_settings?.gecko_android?.strict_min_version !== GECKO_ANDROID_MIN_VERSION) fail(`gecko_android strict_min_version must be ${GECKO_ANDROID_MIN_VERSION}`);
-    if (JSON.stringify(gecko?.data_collection_permissions) !== JSON.stringify({ required: ['none'] })) fail('data_collection_permissions must declare that nothing is collected');
+    if (JSON.stringify(gecko?.data_collection_permissions) !== JSON.stringify({ required: ['authenticationInfo'] })) fail('data_collection_permissions must declare the one thing that leaves the browser: the Quip token, as authenticationInfo');
   }
   if (target === 'safari' && manifest.browser_specific_settings?.safari?.strict_min_version !== SAFARI_MIN_VERSION) fail(`safari strict_min_version must be ${SAFARI_MIN_VERSION}`);
 
@@ -108,7 +113,7 @@ async function verify(target) {
     for (const token of ['tryMutation', '__e2e', 'e2e-target', 'e2e-toolbar', 'freshTestTarget', 'zipMax', 'storeMax', 'partEntries', 'takeDownloads']) if (code.includes(token)) fail(`${file} contains test-only token "${token}"`);
     if (/\beval\s*\(|new Function\s*\(/.test(code)) fail(`${file} uses eval or new Function`);
     const hosts = new Set([...code.matchAll(/https?:\/\/([a-z0-9.-]+)/gi)].map((m) => m[1].toLowerCase()));
-    for (const host of hosts) if (!/(^|\.)quip\.com$/.test(host)) fail(`${file} references unexpected host ${host}`);
+    for (const host of hosts) if (!/(^|\.)quip\.com$/.test(host) && !TEXT_ONLY_HOSTS.has(host)) fail(`${file} references unexpected host ${host}`);
   }
 
   return failures;
@@ -120,4 +125,4 @@ if (failures.length > 0) {
   console.error(`Build verification failed:\n- ${failures.join('\n- ')}`);
   process.exit(1);
 }
-console.log(`Build verification passed for ${requested.join(', ')}: minimal permissions, strict CSP, valid icons, only Quip hosts, no test hooks, no eval.`);
+console.log(`Build verification passed for ${requested.join(', ')}: minimal permissions, strict CSP, valid icons, only Quip hosts (plus example.com and an XML namespace name, as text), no test hooks, no eval.`);

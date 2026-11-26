@@ -25,7 +25,7 @@ interface Offered {
 /** Stock Firefox with the extension installed as a temporary add-on, driven by geckodriver. */
 export class FirefoxDriver implements E2EDriver {
   readonly name = 'firefox' as const;
-  readonly can: Capabilities = { folder: false, guard: true, background: true, unpermittedReads: true, revocableAccess: true };
+  readonly can: Capabilities = { folder: false, guard: true, background: true, unpermittedReads: true, revocableAccess: true, spacesInDownloadNames: true };
   private driver!: firefox.Driver;
   private mock!: MockQuip;
   private uuid = randomUUID();

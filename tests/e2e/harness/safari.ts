@@ -59,7 +59,7 @@ interface Offered {
  */
 export class SafariDriver implements E2EDriver {
   readonly name = 'safari' as const;
-  readonly can: Capabilities = { folder: false, guard: false, background: true, unpermittedReads: true, revocableAccess: false };
+  readonly can: Capabilities = { folder: false, guard: false, background: true, unpermittedReads: true, revocableAccess: false, spacesInDownloadNames: true };
   private extensionOrigin = '';
   private mock!: MockQuip;
   private anchor!: SafariPage;

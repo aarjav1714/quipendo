@@ -49,4 +49,4 @@ Dough at 24 °C doubles in about five hours. The hydration is water over flour, 
 18:00  feed again, use when doubled
 ```
 
-Read more on [Wikipedia](https://en.wikipedia.org/wiki/Sourdough), or write to [baker@example.com](mailto:baker@example.com).
+Read more in [the baking guide](https://example.com/baking/sourdough), or write to [baker@example.com](mailto:baker@example.com).

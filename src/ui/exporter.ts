@@ -15,6 +15,8 @@ import {
   type Plan,
   type RootChoice,
 } from '../core';
+import { DEMO_START_URL, demoDocuments } from '../demo/account';
+import { DEMO_TOKEN, createDemoFetch } from '../demo/api';
 import { FsaSink } from './fsaSink';
 import { installReadOnlyGuard } from './guard';
 import { idbGet, idbSet } from './idb';
@@ -98,6 +100,9 @@ const ui = {
   remember: byId<HTMLInputElement>('remember'),
   connect: byId<HTMLButtonElement>('btn-connect'),
   forget: byId<HTMLButtonElement>('btn-forget'),
+  demo: byId<HTMLButtonElement>('btn-demo'),
+  demoBanner: byId('demo-banner'),
+  demoDocs: byId('demo-docs'),
   connectStatus: byId('connect-status'),
   previewUrl: byId<HTMLInputElement>('preview-url'),
   preview: byId<HTMLButtonElement>('btn-preview'),
@@ -159,6 +164,8 @@ const ui = {
 
 let phase: Phase = 'loading';
 let conn: Connection | undefined;
+/** Set while the demo account is open: every request is answered from the made-up account in this page, and none leaves it. */
+let demoFetch: typeof fetch | undefined;
 let target: FileSystemDirectoryHandle | undefined;
 let pendingHandle: FileSystemDirectoryHandle | undefined;
 let pageTarget: PageTarget | undefined;
@@ -194,6 +201,15 @@ let excluded = new Set<string>();
 let previewedTitle = '';
 
 // ---- small helpers -------------------------------------------------------
+
+/**
+ * How every client reaches Quip: the demo account's fake API in demo mode, the network otherwise. Test builds skip the
+ * politeness delay because their mock server has no rate limit.
+ */
+function transport(): { fetch?: typeof fetch; minIntervalMs?: number } {
+  if (demoFetch) return { fetch: demoFetch, minIntervalMs: 0 };
+  return E2E ? { minIntervalMs: 0 } : {};
+}
 
 const isAbort = (err: unknown): boolean => (err instanceof DOMException || err instanceof Error) && err.name === 'AbortError';
 
@@ -245,6 +261,7 @@ function refresh(): void {
   const busy = phase === 'loading' || phase === 'connecting' || phase === 'scanning' || phase === 'running' || phase === 'previewing' || building;
   ui.connect.disabled = busy;
   ui.forget.disabled = busy;
+  ui.demo.disabled = busy;
   ui.token.disabled = busy;
   ui.pick.disabled = busy;
   ui.regrant.disabled = busy;
@@ -589,26 +606,48 @@ function accessHelp(): string {
 }
 
 function showAccessNotice(): void {
-  const missing = hostAccess === false;
+  // The demo never contacts Quip, so it needs no access to it.
+  const missing = hostAccess === false && demoFetch === undefined;
   ui.accessNotice.hidden = !missing;
   if (missing) setStatus(ui.accessNotice, `Your browser has not given Quipendo access to ${SITE_HOST} yet. Press Connect and allow it when asked.`, 'warn');
 }
 
 const connectedText = (): string => {
+  if (demoFetch) return 'Connected to the demo account. Its documents are made up, and nothing is read from or sent to Quip.';
   const user = conn?.user;
   const site = user?.siteUrl ? ` (${new URL(user.siteUrl).host})` : '';
   return `Connected as ${user?.name || 'your account'}${site}.`;
 };
 
-async function connect(): Promise<void> {
+/** Shows what only the demo needs (the banner, a list of its documents, the way out) while it is open, and hides it after. */
+function showDemoUi(): void {
+  const on = demoFetch !== undefined;
+  ui.demoBanner.hidden = !on;
+  ui.forget.textContent = on ? 'Leave the demo' : 'Forget token';
+  ui.forget.title = on ? 'Close the demo account' : "Remove the token from this page and from the browser's storage";
+  ui.demoDocs.replaceChildren(
+    ...(on
+      ? demoDocuments().map(({ title, url }) => {
+          const option = document.createElement('option');
+          option.value = url;
+          option.label = title;
+          return option;
+        })
+      : []),
+  );
+  showAccessNotice();
+}
+
+/** Connects to Quip with the token in the box, or, with `useDemo`, to the made-up account that needs no token and no network. */
+async function connect(useDemo = false): Promise<void> {
   await exclusive(async () => {
-    const token = ui.token.value.trim();
+    const token = useDemo ? DEMO_TOKEN : ui.token.value.trim();
     if (!token) {
       setStatus(ui.connectStatus, 'Paste your Quip access token first.', 'warn');
       return;
     }
     // A browser only asks the user for access when the request comes straight from the click, so nothing is awaited before it.
-    if (hostAccess === false) {
+    if (!useDemo && hostAccess === false) {
       const granted = await requestHostAccess(BASE_URL);
       hostAccess = granted ? true : false;
       showAccessNotice();
@@ -619,9 +658,10 @@ async function connect(): Promise<void> {
     }
     controller = new AbortController();
     setPhase('connecting');
-    setStatus(ui.connectStatus, 'Connecting…');
+    setStatus(ui.connectStatus, useDemo ? 'Opening the demo account…' : 'Connecting…');
+    demoFetch = useDemo ? createDemoFetch() : undefined;
     try {
-      const client = new QuipClient({ token, baseUrl: BASE_URL, signal: controller.signal });
+      const client = new QuipClient({ token, baseUrl: BASE_URL, signal: controller.signal, ...transport() });
       const user = await client.currentUser();
       const choices = rootChoices(user);
       const folders = await client.getFolders(choices.map((c) => c.id));
@@ -632,18 +672,23 @@ async function connect(): Promise<void> {
       conn = { token, user, roots };
       epoch += 1;
       session = undefined;
-      const lookup = fromUrl ? await lookUpPage(client, fromUrl) : {};
+      const lookup = fromUrl && !useDemo ? await lookUpPage(client, fromUrl) : {};
       pageTarget = lookup.target;
       hidePlan();
       if (pageTarget?.kind === 'document' && fromUrl && !ui.previewUrl.value) ui.previewUrl.value = fromUrl;
-      await saveToken(token, ui.remember.checked);
+      if (useDemo && !ui.previewUrl.value) ui.previewUrl.value = DEMO_START_URL;
+      // The demo's token is not a secret and is never kept; a real one is kept only if the user asked.
+      if (!useDemo) await saveToken(token, ui.remember.checked);
       const settings = await loadSettings();
       renderRoots(settings.roots);
       renderPageScope();
+      showDemoUi();
       setStatus(ui.connectStatus, lookup.problem ? `${connectedText()} ${lookup.problem}` : connectedText(), lookup.problem ? 'warn' : 'ok');
       setPhase('connected');
     } catch (err) {
       conn = undefined;
+      demoFetch = undefined;
+      showDemoUi();
       // No answer at all, as opposed to a refusal from Quip, is what a browser that withholds the site gives.
       const noAnswer = err instanceof Error && err.message.startsWith('Network error');
       setStatus(
@@ -665,7 +710,7 @@ async function selectPage(url: string): Promise<void> {
   setPhase('connecting');
   setStatus(ui.connectStatus, 'Looking up the Quip page you selected…');
   try {
-    const lookup = await lookUpPage(new QuipClient({ token, baseUrl: BASE_URL, signal: controller.signal }), url);
+    const lookup = await lookUpPage(new QuipClient({ token, baseUrl: BASE_URL, signal: controller.signal, ...transport() }), url);
     pageTarget = lookup.target;
     renderPageScope();
     // The scope changed, so a scan shown for the old one no longer applies.
@@ -765,20 +810,27 @@ async function makeSession(signal: AbortSignal, withExclusions = true): Promise<
     options: buildOptions(withExclusions),
     signal,
     onEvent: handleEvent,
-    // Test builds skip the politeness delay because the mock server has no rate limit.
-    ...(E2E ? { client: { minIntervalMs: 0 } } : {}),
+    client: transport(),
   });
 }
 
 const scopeKey = (withExclusions = true): string => JSON.stringify([buildOptions(withExclusions), epoch, storeMode]);
 
-/** Wipes the token from the page and from both kinds of browser storage, and disconnects. */
+/** Wipes the token from the page and from both kinds of browser storage, and disconnects. In the demo it only closes the demo. */
 async function forgetToken(): Promise<void> {
   await exclusive(async () => {
-    await sessionStore.remove('token');
-    await ext.storage.local.remove('token');
-    ui.token.value = '';
-    ui.remember.checked = false;
+    const wasDemo = demoFetch !== undefined;
+    if (!wasDemo) {
+      await sessionStore.remove('token');
+      await ext.storage.local.remove('token');
+      ui.token.value = '';
+      ui.remember.checked = false;
+    } else {
+      ui.previewUrl.value = '';
+      ui.previewResult.hidden = true;
+      ui.previewStatus.textContent = '';
+    }
+    demoFetch = undefined;
     conn = undefined;
     session = undefined;
     epoch += 1;
@@ -786,7 +838,8 @@ async function forgetToken(): Promise<void> {
     renderRoots(null);
     renderPageScope();
     hidePlan();
-    setStatus(ui.connectStatus, 'The token was removed from this page and from the browser. Paste a token to connect again.');
+    showDemoUi();
+    setStatus(ui.connectStatus, wasDemo ? 'You left the demo. Paste a token to connect to Quip.' : 'The token was removed from this page and from the browser. Paste a token to connect again.');
     setPhase('idle');
   });
 }
@@ -1040,7 +1093,7 @@ async function preview(): Promise<void> {
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         },
         signal: controller.signal,
-        ...(E2E ? { client: { minIntervalMs: 0 } } : {}),
+        client: transport(),
       });
       const result = await exporter.preview(id);
       previewedTitle = result.title;
@@ -1155,6 +1208,7 @@ async function init(): Promise<void> {
   if (__E2E__ && E2E) (await import('./e2eHooks')).installTestHooks({ target: () => target, store: () => (storeMode ? store : undefined), useTarget });
 
   ui.connect.addEventListener('click', () => void connect());
+  ui.demo.addEventListener('click', () => void connect(true));
   ui.forget.addEventListener('click', () => void forgetToken());
   ui.token.addEventListener('keydown', (e) => e.key === 'Enter' && void connect());
   ui.pick.addEventListener('click', () => void pickTarget());
@@ -1210,6 +1264,8 @@ async function init(): Promise<void> {
   const stored = E2E ? (params.get('token') ?? undefined) : await loadToken();
   if (stored) ui.token.value = stored;
   setPhase('idle');
+  // A link that opens the page already inside the demo, for showing it to someone or testing it.
+  if (params.get('demo') === '1') void connect(true);
 }
 
 void init();

@@ -43,4 +43,17 @@ describe.skipIf(!production)('the package people install', () => {
     expect(mock.requests).toEqual([]);
     await page.close();
   });
+
+  it('opens the demo account, which needs no token and no network, and previews a document', async () => {
+    const page = await driver.open();
+    await page.click('#btn-demo');
+    await page.waitForSelector('body[data-state="connected"]', { timeout: 60_000 });
+    await expect(page.isVisible('#demo-banner')).resolves.toBe(true);
+    await page.click('#btn-preview');
+    await page.waitForSelector('#preview-result:not([hidden])', { timeout: 60_000 });
+    const markdown = await page.inputValue('#preview-text');
+    for (const label of ['**Process bar**', '**Calendar**', '**Kanban board**', '**Project tracker**']) expect(markdown, label).toContain(label);
+    expect(mock.requests).toEqual([]);
+    await page.close();
+  });
 });

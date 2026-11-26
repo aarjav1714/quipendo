@@ -20,7 +20,7 @@ export const wipePageStorage = async (): Promise<void> => {
 /** Chromium with the extension loaded from `dist-e2e`, driven by Playwright. */
 export class ChromiumDriver implements E2EDriver {
   readonly name = 'chromium' as const;
-  readonly can: Capabilities = { folder: true, guard: true, background: true, unpermittedReads: true, revocableAccess: false };
+  readonly can: Capabilities = { folder: true, guard: true, background: true, unpermittedReads: true, revocableAccess: false, spacesInDownloadNames: true };
   private context!: BrowserContext;
   private profile = '';
   private extensionId = '';

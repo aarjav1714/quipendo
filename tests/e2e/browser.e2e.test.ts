@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { ExportOptions } from '../../src/core';
 import { createSession } from '../../src/core/session';
@@ -739,7 +739,7 @@ describe(`the extension in ${driver.name}`, () => {
     await expect(page.textContent('#preview-status')).resolves.toContain('The text is selected');
 
     const saved = await saveDownload(page, '#btn-download-md');
-    expect(saved.name).toBe('Project Plan.md');
+    expect(driver.can.spacesInDownloadNames ? saved.name : saved.name.replace(/_/g, ' ')).toBe('Project Plan.md');
     expect(new TextDecoder().decode(saved.bytes)).toBe(markdown);
     await page.close();
   });
@@ -975,6 +975,68 @@ describe(`the extension in ${driver.name}`, () => {
       await page.close();
       await flaky.close();
     }
+  });
+
+  describe('the demo account', () => {
+    const SAMPLE = resolve(__dirname, '../../examples/sample-output');
+
+    it('opens with no token, says it is made up, previews every kind of embedded content, and contacts nobody', async () => {
+      const before = mock.requests.length;
+      const page = await openExporter();
+      const typed = await page.inputValue('#token');
+      await expect(page.isVisible('#demo-banner')).resolves.toBe(false);
+      await page.click('#btn-demo');
+      await state(page, 'connected');
+      await expect(page.isVisible('#demo-banner')).resolves.toBe(true);
+      await expect(page.textContent('#demo-banner')).resolves.toContain('made-up account');
+      await expect(page.textContent('#connect-status')).resolves.toContain('demo account');
+      await expect(page.textContent('#btn-forget')).resolves.toBe('Leave the demo');
+      // Whatever was typed in the token box is left alone, and the demo's own token is never put there.
+      await expect(page.inputValue('#token')).resolves.toBe(typed);
+
+      // The document with the most kinds of content is offered first, and the others can be chosen from the browser's own list.
+      await expect(page.inputValue('#preview-url')).resolves.toBe('https://acme.quip.com/RELAUNCHpl1/Website-Relaunch-Project-Plan');
+      await expect(page.$$eval('#demo-docs option', (options) => options.length)).resolves.toBe(13);
+      await page.click('#btn-preview');
+      await page.waitForSelector('#preview-result:not([hidden])');
+      const markdown = await page.inputValue('#preview-text');
+      for (const label of ['**Process bar**', '**Calendar**', '**Kanban board**', '**Project tracker**']) expect(markdown, label).toContain(label);
+      await expect(page.textContent('#preview-status')).resolves.toContain('Nothing was saved');
+
+      await page.click('#btn-forget');
+      await state(page, 'idle');
+      await expect(page.isVisible('#demo-banner')).resolves.toBe(false);
+      await expect(page.textContent('#btn-forget')).resolves.toBe('Forget token');
+      await expect(page.inputValue('#preview-url')).resolves.toBe('');
+      await expect(page.isDisabled('#btn-scan')).resolves.toBe(true);
+      expect(mock.requests.length).toBe(before);
+      await page.close();
+    });
+
+    it('exports exactly the sample output in the repository, in the browser, and contacts nobody', async () => {
+      const before = mock.requests.length;
+      const page = await openExporter();
+      await page.click('#btn-demo');
+      await state(page, 'connected');
+      await page.check('#out-store');
+      await page.click('#btn-scan');
+      await state(page, 'scanned');
+      await expect(page.textContent('#scan-summary')).resolves.toContain('13 documents in 9 folders');
+      await page.click('#btn-run');
+      await state(page, 'done');
+      await expect(page.textContent('#run-status')).resolves.toMatch(/Done\. 13 saved, 0 unchanged of 13 documents/);
+
+      const zip = readZip((await saveDownload(page, '.zip-part')).bytes);
+      const raw = (tree: Record<string, string>): Record<string, string> => Object.fromEntries(Object.entries(tree).filter(([name]) => !name.startsWith('.quip-raw/')));
+      const sample = withoutDirs(comparable(await nodeTree(SAMPLE)));
+      // The sample was made without the raw archive and with a frozen clock; what is left must be identical, file for file.
+      const made = raw(comparable(zipFiles(zip)));
+      expect(Object.keys(made).sort()).toEqual(Object.keys(sample).sort());
+      for (const [name, text] of Object.entries(sample)) expect(made[name], name).toBe(text);
+      expect(new TextDecoder().decode(zip['Private/Projects/Budget 2026.xlsx']?.data)).toContain('<f>SUM(B2:B6)</f>');
+      expect(mock.requests.length).toBe(before);
+      await page.close();
+    });
   });
 
   it('never sent anything but reads, whatever the page was asked to do', () => {

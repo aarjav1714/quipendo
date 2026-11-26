@@ -75,7 +75,7 @@ Offer → Day 1 → Week 1 → **Month 1** (current) → Review
 git clone git@example.com:acme/website.git
 cd website
 make setup
-make dev   # http://localhost:3000
+make dev   # then open the address it prints
 ```
 
 The old wiki is retired: [Company Wiki](https://acme.quip.com/ZZoutsideDoc/Company-Wiki) (that page is not part of this export).

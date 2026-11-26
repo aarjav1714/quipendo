@@ -29,10 +29,10 @@ export function normalizeSample(path: string, bytes: Uint8Array): Uint8Array {
  * time zone are fixed, so the same code always makes the same files. Quipendo's own bookkeeping (`.quip-md-export/`, used
  * to resume a run) is not part of the sample.
  */
-export async function generateSample(outDir: string, fixture: Fixture = buildDemoFixture()): Promise<SampleRun> {
+export async function generateSample(outDir: string, fixture: Fixture = buildDemoFixture(), args: string[] = ['--no-raw']): Promise<SampleRun> {
   const lines: string[] = [];
   const io: CliIo = { out: (l) => lines.push(l), err: (l) => lines.push(l), readStdin: () => Promise.resolve('') };
-  const code = await main(['--out', outDir, '--no-raw'], { QUIP_TOKEN: DEMO_TOKEN }, io, {
+  const code = await main(['--out', outDir, ...args], { QUIP_TOKEN: DEMO_TOKEN }, io, {
     now: () => SAMPLE_NOW,
     timeZone: 'UTC',
     client: { fetch: createDemoFetch(fixture), minIntervalMs: 0 },
