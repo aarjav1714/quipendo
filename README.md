@@ -26,9 +26,18 @@ Quip is being retired. [Salesforce's notice](https://help.salesforce.com/s/artic
 
 You do not need a Quip account to see what Quipendo does.
 
-- **Try the demo.** In the extension, press **Try the demo**. It opens a made-up account ("Acme Studio": thirteen documents, five people) inside the page, with no token and no network, so you can preview a document as formatted Markdown, tick folders, and export to a folder or a `.zip` exactly as you would with your own account. Everything in it is invented.
+- **Try the demo.** In the extension, press **Try the demo**. It opens a made-up account ("Acme Studio": thirteen documents, five people) inside the page, with no token and no network, so you can preview a document drawn the way it reads (the **Preview** tab) or as the Markdown it will be saved as (the **Markdown** tab), tick folders, and export to a folder or a `.zip` exactly as you would with your own account. Everything in it is invented.
 - **Read what comes out.** [`examples/sample-output/`](examples/sample-output) is what Quipendo wrote for that account. GitHub shows the Markdown rendered, so start with [the project plan](examples/sample-output/Private/Projects/Website%20Relaunch/Website%20Relaunch%20-%20Project%20Plan.md): a status bar, a calendar, a Kanban board, a project tracker, images, an attachment and comments, one of them on highlighted text. [examples/README.md](examples/README.md) says where to look for the rest.
 - **What it converts.** Calendars, Kanban boards, project trackers, process bars, polls, countdowns, videos, Salesforce records and lists, spreadsheets (the `.xlsx` is kept beside the note, so the formulas survive), checklists, tables, code, quotes, images, attachments, slide decks (a note plus a PDF), comments (next to the text they are about) and links between documents.
+
+<p>
+  <img src="https://raw.githubusercontent.com/aarjav1714/quipendo/main/assets/store/screenshot-1-preview.jpg" alt="The Preview tab: a made-up project plan drawn as a document, with its status bar, checklist and links" width="49%">
+  <img src="https://raw.githubusercontent.com/aarjav1714/quipendo/main/assets/store/screenshot-2-board.jpg" alt="The same plan further down: a Kanban board and a project tracker, kept as readable text" width="49%">
+</p>
+<p>
+  <img src="https://raw.githubusercontent.com/aarjav1714/quipendo/main/assets/store/screenshot-3-markdown.jpg" alt="The Markdown tab: the same document as plain Markdown with its front matter" width="49%">
+  <img src="https://raw.githubusercontent.com/aarjav1714/quipendo/main/assets/store/screenshot-4-choose.jpg" alt="Choosing which folders and documents to export" width="49%">
+</p>
 
 ## Run it
 
@@ -86,7 +95,7 @@ caffeinate -i npm run cli -- --out ~/quip-export
 Done. 13 saved, 0 unchanged, 0 failed of 13 documents.
 Attachments: 6 saved, 0 reused, 0 unavailable. Comments exported: 10.
 Embedded content converted: spreadsheet 6, calendar 2, video 2, process_bar 2, kanban 2, project_tracker 1, countdown 2, salesforce_record 1, salesforce_list 1, poll 1.
-Warning link-outside-export (1): Team Handbook: ZZoutsideDoc
+Warning link-outside-export (1): Team Handbook: OUTSIDEdoc1
 1 links point to documents outside this export and still use their Quip address.
 Report: _Quip export report.md
 ```

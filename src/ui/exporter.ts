@@ -20,6 +20,7 @@ import { DEMO_TOKEN, createDemoFetch } from '../demo/api';
 import { FsaSink } from './fsaSink';
 import { installReadOnlyGuard } from './guard';
 import { idbGet, idbSet } from './idb';
+import { renderMarkdownPreview } from './markdownPreview';
 import { MemoryBackend, StoreSink, zipFileName, type StoreStats, type ZipPart } from './storeSink';
 import { renderPlanTree, type PlanTree } from './tree';
 import { TARGET, ext, hasHostAccess, requestHostAccess, sessionStore } from './webext';
@@ -101,6 +102,7 @@ const ui = {
   connect: byId<HTMLButtonElement>('btn-connect'),
   forget: byId<HTMLButtonElement>('btn-forget'),
   demo: byId<HTMLButtonElement>('btn-demo'),
+  demoRow: byId('demo-row'),
   demoBanner: byId('demo-banner'),
   demoDocs: byId('demo-docs'),
   connectStatus: byId('connect-status'),
@@ -108,6 +110,10 @@ const ui = {
   preview: byId<HTMLButtonElement>('btn-preview'),
   previewStatus: byId('preview-status'),
   previewResult: byId('preview-result'),
+  tabRendered: byId<HTMLButtonElement>('tab-rendered'),
+  tabMarkdown: byId<HTMLButtonElement>('tab-markdown'),
+  previewRendered: byId('preview-rendered'),
+  previewMarkdown: byId('preview-markdown'),
   previewText: byId<HTMLTextAreaElement>('preview-text'),
   copy: byId<HTMLButtonElement>('btn-copy'),
   downloadMd: byId<HTMLButtonElement>('btn-download-md'),
@@ -623,6 +629,7 @@ const connectedText = (): string => {
 function showDemoUi(): void {
   const on = demoFetch !== undefined;
   ui.demoBanner.hidden = !on;
+  ui.demoRow.hidden = on;
   ui.forget.textContent = on ? 'Leave the demo' : 'Forget token';
   ui.forget.title = on ? 'Close the demo account' : "Remove the token from this page and from the browser's storage";
   ui.demoDocs.replaceChildren(
@@ -827,7 +834,7 @@ async function forgetToken(): Promise<void> {
       ui.remember.checked = false;
     } else {
       ui.previewUrl.value = '';
-      ui.previewResult.hidden = true;
+      hidePreview();
       ui.previewStatus.textContent = '';
     }
     demoFetch = undefined;
@@ -1064,6 +1071,23 @@ const NOTE_TEXT: Record<string, string> = {
   'live-app-no-data': 'an embedded app sent no data',
 };
 
+/** Shows the document drawn as it will read (the default) or as the Markdown text a copy or download would give. */
+function showPreviewTab(which: 'rendered' | 'markdown'): void {
+  const rendered = which === 'rendered';
+  ui.tabRendered.setAttribute('aria-selected', String(rendered));
+  ui.tabMarkdown.setAttribute('aria-selected', String(!rendered));
+  ui.tabRendered.tabIndex = rendered ? 0 : -1;
+  ui.tabMarkdown.tabIndex = rendered ? -1 : 0;
+  ui.previewRendered.hidden = !rendered;
+  ui.previewMarkdown.hidden = rendered;
+}
+
+function hidePreview(): void {
+  ui.previewResult.hidden = true;
+  ui.previewRendered.replaceChildren();
+  ui.previewText.value = '';
+}
+
 /** Converts one document without saving anything or downloading attachments, so a person can see what an export would make of it. */
 async function preview(): Promise<void> {
   if (!conn) return;
@@ -1076,7 +1100,7 @@ async function preview(): Promise<void> {
     if (!conn) return;
     const before = phase;
     controller = new AbortController();
-    ui.previewResult.hidden = true;
+    hidePreview();
     setPhase('previewing');
     setStatus(ui.previewStatus, 'Reading the document…');
     try {
@@ -1098,6 +1122,8 @@ async function preview(): Promise<void> {
       const result = await exporter.preview(id);
       previewedTitle = result.title;
       ui.previewText.value = result.markdown;
+      ui.previewRendered.replaceChildren(renderMarkdownPreview(result.markdown, document));
+      showPreviewTab('rendered');
       ui.previewResult.hidden = false;
       // Every link to another document counts as "outside" here, since nothing was exported for it to point at.
       const notes = [...new Set(result.warnings.map((w) => w.code))].filter((code) => code !== 'link-outside-export').map((code) => NOTE_TEXT[code] ?? code);
@@ -1121,6 +1147,8 @@ async function copyPreview(): Promise<void> {
     await navigator.clipboard.writeText(ui.previewText.value);
     setStatus(ui.previewStatus, 'Copied the Markdown to the clipboard.', 'ok');
   } catch {
+    showPreviewTab('markdown');
+    ui.previewText.focus();
     ui.previewText.select();
     setStatus(ui.previewStatus, 'The browser would not copy it for you. The text is selected: press Ctrl+C (⌘C on a Mac).', 'warn');
   }
@@ -1219,6 +1247,17 @@ async function init(): Promise<void> {
   ui.previewUrl.addEventListener('keydown', (e) => e.key === 'Enter' && void preview());
   ui.copy.addEventListener('click', () => void copyPreview());
   ui.downloadMd.addEventListener('click', downloadPreview);
+  ui.tabRendered.addEventListener('click', () => showPreviewTab('rendered'));
+  ui.tabMarkdown.addEventListener('click', () => showPreviewTab('markdown'));
+  for (const tab of [ui.tabRendered, ui.tabMarkdown]) {
+    tab.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const first = event.key === 'ArrowLeft' || event.key === 'Home';
+      showPreviewTab(first ? 'rendered' : 'markdown');
+      (first ? ui.tabRendered : ui.tabMarkdown).focus();
+    });
+  }
   for (const el of [ui.outFolder, ui.outStore]) el.addEventListener('change', () => void setOutput(ui.outStore.checked));
   ui.clear.addEventListener('click', () => {
     confirmingClear = true;

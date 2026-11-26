@@ -7,7 +7,7 @@ Everything needed to fill in the listing is here. Submitting it needs your own d
 1. Register at the [developer dashboard](https://chrome.google.com/webstore/devconsole). There is a one-time registration fee, and Google's page lists the [supported countries](https://developer.chrome.com/docs/webstore/register). Use an email you check often: review messages and policy warnings go there, and it cannot be changed later.
 2. Publish the [privacy policy](../PRIVACY.md) at a public address (its address on GitHub works once it is pushed): `https://github.com/aarjav1714/quipendo/blob/main/PRIVACY.md`.
 3. Get the package: the `quipendo-chrome-<version>.zip` attached to a [release](https://github.com/aarjav1714/quipendo/releases) (the release workflow builds it from a version tag), or build it yourself with `npm run build` and zip the *contents* of `dist/`, so `manifest.json` is at the top of the zip.
-4. The listing images are in [`assets/store/`](../assets/store). `npm run store-assets` rebuilds them from the real extension page and the test account, and `npm run icons` rebuilds the store icon.
+4. The listing images are in [`assets/store/`](../assets/store). `npm run store-assets` rebuilds them from the real extension page running its built-in demo, and `npm run icons` rebuilds the store icon.
 
 ## Listing
 
@@ -74,15 +74,15 @@ Everything needed to fill in the listing is here. Submitting it needs your own d
 Upload from [`assets/store/`](../assets/store):
 
 - Store icon (128 x 128, artwork 96 x 96 with 16 px of transparent padding, as Google recommends): `store-icon-128.png`
-- Screenshots (1280 x 800, full bleed with square corners; at least one is required and five are allowed): `screenshot-1-preview.jpg`, `screenshot-2-choose.jpg`, `screenshot-3-export.jpg`
+- Screenshots (1280 x 800, full bleed with square corners; at least one is required and five are allowed, and these are five): `screenshot-1-preview.jpg`, `screenshot-2-board.jpg`, `screenshot-3-markdown.jpg`, `screenshot-4-choose.jpg`, `screenshot-5-export.jpg`
 - Small promo tile (440 x 280): `promo-tile-440x280.jpg`
 - Marquee promo tile (1400 x 560, optional, needed to be featured): `marquee-1400x560.jpg`
 
-The tiles carry the QuipEnd! wordmark; the listing's name field stays plain text, *Quipendo*. The screenshots show the real extension page working on the made-up account that the tests use. No real document or account appears in them. They are JPEG, so there is no alpha channel for the store's validation to trip over (a browser screenshot saved as PNG has one). Google suggests promo tiles that communicate the brand with little text; these are plain and can be replaced.
+The tiles carry the QuipEnd! wordmark; the listing's name field stays plain text, *Quipendo*. The screenshots show the real extension page running its built-in demo, a made-up account: no real document or account appears in them. They are JPEG, so there is no alpha channel for the store's validation to trip over (a browser screenshot saved as PNG has one). Google suggests promo tiles that communicate the brand with little text; these are plain and can be replaced.
 
 ## Test instructions for the reviewer
 
-The extension needs a Quip personal access token, which a reviewer cannot get without a Quip account. Say so in the *Test instructions* field and either give a test account and token (use a throwaway account with a few made-up documents, and revoke the token afterwards) or point to a short screen recording of a scan, a preview and an export. A listing the reviewer cannot try is the likeliest reason for a rejection.
+The extension needs a Quip personal access token, which a reviewer cannot get without a Quip account, so it has a built-in demo with made-up documents that needs no token and makes no network request. Paste the *Chrome Web Store, Test instructions* block from [reviewing.md](reviewing.md#ready-to-paste-text) into the *Test instructions* field; the same file has the full steps for anyone who wants to check the extension by hand. A listing the reviewer cannot try is the likeliest reason for a rejection.
 
 ## Risks to know about
 
@@ -96,8 +96,8 @@ The extension needs a Quip personal access token, which a reviewer cannot get wi
 - [ ] `quipendo` published to npm (the description mentions `npx quipendo`), or that sentence removed
 - [ ] Package uploaded (`manifest.json` at the top of the zip; version matches the tag)
 - [ ] Listing text, category and language filled in
-- [ ] Store icon, three screenshots, small tile (and marquee) uploaded
+- [ ] Store icon, five screenshots, small tile (and marquee) uploaded
 - [ ] Privacy policy URL set; single purpose and permission justifications pasted
 - [ ] Data usage and certifications ticked
-- [ ] Test instructions written, with an account or a recording
+- [ ] Test instructions pasted (the built-in demo; no account or recording needed)
 - [ ] Submit, and watch the developer email for the result

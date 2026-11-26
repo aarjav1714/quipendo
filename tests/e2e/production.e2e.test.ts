@@ -53,6 +53,11 @@ describe.skipIf(!production)('the package people install', () => {
     await page.waitForSelector('#preview-result:not([hidden])', { timeout: 60_000 });
     const markdown = await page.inputValue('#preview-text');
     for (const label of ['**Process bar**', '**Calendar**', '**Kanban board**', '**Project tracker**']) expect(markdown, label).toContain(label);
+    // The built (minified) page draws the same document, with its tables, checklist and comments.
+    await expect(page.textContent('#preview-rendered h1')).resolves.toBe('Website Relaunch: Project Plan');
+    await expect(page.$$eval('#preview-rendered table', (found) => found.length)).resolves.toBe(2);
+    await expect(page.$$eval('#preview-rendered input[type="checkbox"]', (found) => found.length)).resolves.toBe(5);
+    await expect(page.$$eval('#preview-rendered .md-comment', (found) => found.length)).resolves.toBeGreaterThanOrEqual(3);
     expect(mock.requests).toEqual([]);
     await page.close();
   });

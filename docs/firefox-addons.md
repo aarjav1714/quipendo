@@ -37,7 +37,8 @@ You need your own account, so this is the one step that cannot be done from the 
 2. Upload `quipendo-firefox-<version>.zip`: the package attached to a release (the release workflow builds it from a version tag), or `cd dist-firefox && zip -r -X ../quipendo-firefox.zip .` so `manifest.json` is at the top.
 3. The code is bundled and minified, so Mozilla's reviewers need the source: when asked, upload `quipendo-source-<version>.zip` from the same release (or `git archive --format=zip -o quipendo-source.zip HEAD`) and give these build steps: *Node 22 or later; `npm ci`; `npm run build:firefox`; the add-on is `dist-firefox/`.*
 4. Fill in the listing with the text in [chrome-web-store.md](chrome-web-store.md) (name, summary, description, category), the privacy policy at `https://github.com/aarjav1714/quipendo/blob/main/PRIVACY.md`, the licence (MIT), and the permission reasons given there: `storage`, `activeTab`, `declarativeNetRequest` and `https://platform.quip.com/*`. Under data collection nothing is collected or transmitted to the developer.
-5. Submit, and watch the account's email for the result.
+5. Add the screenshots: the five `screenshot-*.jpg` in [`assets/store/`](../assets/store), all of the built-in demo's made-up documents. In *Notes to reviewer* paste the *Firefox Add-ons* block from [reviewing.md](reviewing.md#ready-to-paste-text): a reviewer has no Quip token, so it points them at the demo and at the build steps.
+6. Submit, and watch the account's email for the result.
 
 **The add-on id cannot change after the first upload.** `quipendo@aarjav1714.github.io` was chosen for this project and has not been registered anywhere. Mozilla only needs an email-like id that is unique; if you want a different one, change `GECKO_ID` in `scripts/targets.mjs` before the first submission.
 
@@ -46,5 +47,6 @@ You need your own account, so this is the one step that cannot be done from the 
 - [ ] Add-on id settled (`GECKO_ID` in `scripts/targets.mjs`)
 - [ ] `npm run check` and `npm run e2e:firefox` pass
 - [ ] `quipendo-firefox-<version>.zip` and `quipendo-source-<version>.zip` from the release
-- [ ] Listing, privacy policy URL and licence filled in
+- [ ] Listing, screenshots, privacy policy URL and licence filled in
+- [ ] Notes to reviewer pasted (the demo and the build steps)
 - [ ] Source and build steps provided when the review asks

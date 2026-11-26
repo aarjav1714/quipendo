@@ -719,6 +719,10 @@ describe(`the extension in ${driver.name}`, () => {
     await expect(page.getAttribute('body', 'data-state')).resolves.toBe('connected');
     expect(mock.requests.slice(before).filter((r) => r.path.startsWith('/blob/'))).toEqual([]);
     expect(await readTree(page)).toEqual({});
+    // The document is drawn first; its Markdown is behind the other tab, and is what Copy and Download give.
+    await expect(page.isVisible('#preview-rendered')).resolves.toBe(true);
+    await expect(page.isVisible('#preview-text')).resolves.toBe(false);
+    await expect(page.textContent('#preview-rendered h1')).resolves.toBe('Project Plan');
 
     await page.evaluate(() => {
       const copied: string[] = [];
@@ -731,12 +735,14 @@ describe(`the extension in ${driver.name}`, () => {
     await page.click('#btn-copy');
     await expect(page.textContent('#preview-status')).resolves.toContain('Copied the Markdown');
     expect(await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied)).toEqual([markdown]);
-    // Where the browser refuses, the text is selected for the user to copy by hand.
+    // Where the browser refuses, the text is selected for the user to copy by hand, so it is shown.
     await page.evaluate(() => {
       navigator.clipboard.writeText = () => Promise.reject(new Error('denied'));
     });
     await page.click('#btn-copy');
     await expect(page.textContent('#preview-status')).resolves.toContain('The text is selected');
+    await expect(page.isVisible('#preview-text')).resolves.toBe(true);
+    await expect(page.getAttribute('#tab-markdown', 'aria-selected')).resolves.toBe('true');
 
     const saved = await saveDownload(page, '#btn-download-md');
     expect(driver.can.spacesInDownloadNames ? saved.name : saved.name.replace(/_/g, ' ')).toBe('Project Plan.md');
@@ -1009,6 +1015,70 @@ describe(`the extension in ${driver.name}`, () => {
       await expect(page.textContent('#btn-forget')).resolves.toBe('Forget token');
       await expect(page.inputValue('#preview-url')).resolves.toBe('');
       await expect(page.isDisabled('#btn-scan')).resolves.toBe(true);
+      expect(mock.requests.length).toBe(before);
+      await page.close();
+    });
+
+    it('draws the preview as a formatted document with its Markdown a tab away, and nothing drawn can load or run', async () => {
+      const before = mock.requests.length;
+      const page = await openExporter();
+      await page.click('#btn-demo');
+      await state(page, 'connected');
+      // The demo's own button has done its job once the demo is open.
+      await expect(page.isVisible('#demo-row')).resolves.toBe(false);
+      await page.click('#btn-preview');
+      await page.waitForSelector('#preview-result:not([hidden])');
+
+      // The drawn document comes first; the Markdown text is behind the other tab.
+      await expect(page.getAttribute('#tab-rendered', 'aria-selected')).resolves.toBe('true');
+      await expect(page.isVisible('#preview-rendered')).resolves.toBe(true);
+      await expect(page.isVisible('#preview-text')).resolves.toBe(false);
+      await expect(page.textContent('#preview-rendered h1')).resolves.toBe('Website Relaunch: Project Plan');
+      const drawn = (await page.textContent('#preview-rendered')) ?? '';
+      for (const text of ['Process bar', 'Calendar', 'Kanban board', 'Project tracker', 'Comments and conversation', 'Comments on highlighted text']) expect(drawn, text).toContain(text);
+      // Tables, checklists and comments are drawn as such, not left as Markdown symbols.
+      await expect(page.$$eval('#preview-rendered table', (found) => found.length)).resolves.toBe(2);
+      await expect(page.$$eval('#preview-rendered input[type="checkbox"]', (found) => found.length)).resolves.toBe(5);
+      await expect(page.$$eval('#preview-rendered .md-comment', (found) => found.length)).resolves.toBeGreaterThanOrEqual(3);
+      expect(drawn).not.toContain('| ---');
+      expect(drawn).not.toContain('**');
+      // Nothing drawn can navigate, fetch or run anything: no links, images, frames, forms, styles, scripts or event handlers.
+      const live = await page.$$eval(
+        '#preview-rendered *',
+        (all) =>
+          all.filter(
+            (e) =>
+              ['A', 'IMG', 'IFRAME', 'FORM', 'SCRIPT', 'STYLE', 'LINK', 'OBJECT', 'EMBED', 'SVG', 'VIDEO', 'AUDIO'].includes(e.tagName.toUpperCase()) ||
+              e.getAttributeNames().some((name) => name === 'href' || name === 'src' || name === 'style' || name.startsWith('on')),
+          ).length,
+      );
+      expect(live).toBe(0);
+
+      await page.click('#tab-markdown');
+      await expect(page.getAttribute('#tab-markdown', 'aria-selected')).resolves.toBe('true');
+      await expect(page.isVisible('#preview-text')).resolves.toBe(true);
+      await expect(page.isVisible('#preview-rendered')).resolves.toBe(false);
+      await expect(page.inputValue('#preview-text')).resolves.toContain('**Calendar**');
+      // The arrow keys move between the two tabs, as in any tab list.
+      await page.evaluate(() => {
+        document.getElementById('tab-markdown')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }));
+      });
+      await expect(page.getAttribute('#tab-rendered', 'aria-selected')).resolves.toBe('true');
+      await expect(page.isVisible('#preview-rendered')).resolves.toBe(true);
+
+      // The next preview starts on the drawn document again, and leaving the demo empties both views.
+      await page.click('#tab-markdown');
+      await page.fill('#preview-url', 'https://acme.quip.com/LAUNCHlist1/Launch-Checklist');
+      await page.click('#btn-preview');
+      await expect.poll(() => page.textContent('#preview-status')).toContain('Launch Checklist (document)');
+      await expect(page.getAttribute('#tab-rendered', 'aria-selected')).resolves.toBe('true');
+      await expect(page.textContent('#preview-rendered h1')).resolves.toBe('Launch Checklist');
+      await page.click('#btn-forget');
+      await state(page, 'idle');
+      await expect(page.isVisible('#preview-result')).resolves.toBe(false);
+      await expect(page.$$eval('#preview-rendered *', (all) => all.length)).resolves.toBe(0);
+      await expect(page.inputValue('#preview-text')).resolves.toBe('');
+      await expect(page.isVisible('#demo-row')).resolves.toBe(true);
       expect(mock.requests.length).toBe(before);
       await page.close();
     });

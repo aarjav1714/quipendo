@@ -50,7 +50,7 @@
           <button id="btn-forget" type="button" title="Remove the token from this page and from the browser's storage">Forget token</button>
         </div>
         <label class="check"><input id="remember" type="checkbox" /><span>Remember the token on this computer</span></label>
-        <div class="row demo-row">
+        <div id="demo-row" class="row demo-row">
           <button id="btn-demo" type="button">Try the demo</button>
           <span class="hint">
             No Quip account, or just looking? The demo opens a made-up account with documents of every kind. It runs inside this page and
@@ -74,7 +74,14 @@
         </div>
         <p id="preview-status" class="status" role="status" data-tone="info"></p>
         <div id="preview-result" hidden>
-          <textarea id="preview-text" readonly rows="14" spellcheck="false" aria-label="The document as Markdown"></textarea>
+          <div class="tabs" role="tablist" aria-label="Show the document as">
+            <button id="tab-rendered" class="tab" type="button" role="tab" aria-selected="true" aria-controls="preview-rendered">Preview</button>
+            <button id="tab-markdown" class="tab" type="button" role="tab" aria-selected="false" aria-controls="preview-markdown" tabindex="-1">Markdown</button>
+          </div>
+          <div id="preview-rendered" class="preview-pane" role="tabpanel" aria-labelledby="tab-rendered" tabindex="0"></div>
+          <div id="preview-markdown" role="tabpanel" aria-labelledby="tab-markdown" hidden>
+            <textarea id="preview-text" readonly rows="14" spellcheck="false" aria-label="The document as Markdown"></textarea>
+          </div>
           <div class="row">
             <button id="btn-copy" type="button">Copy Markdown</button>
             <button id="btn-download-md" type="button">Download .md</button>
