@@ -31,7 +31,7 @@ Everything needed to fill in the listing is here. Submitting it needs your own d
 > • An index of everything exported, and a report of what needs attention
 >
 > You stay in control
-> • Preview one document before exporting anything
+> • Preview one document before exporting anything, drawn the way it reads, with the Markdown it will be saved as a tab away
 > • Tick the folders and documents you want, filter by name, or export only what changed since a date
 > • Save to a folder (it can be stopped, continued and updated later), or keep the export in the browser and download it as a .zip
 > • Optional Word (.docx) copies
@@ -45,6 +45,8 @@ Everything needed to fill in the listing is here. Submitting it needs your own d
 > 1. Sign in to Quip and create a personal access token at quip.com/dev/token
 > 2. Click the Quipendo icon, paste the token and press Connect
 > 3. Scan, choose what to export, and start
+>
+> Just looking? Press "Try the demo": a made-up account with documents of every kind opens inside the page, with no token, no Quip account and no network.
 >
 > A command line version (npx quipendo) uses the same code, and is better for a large export because nothing has to stay on screen.
 >
