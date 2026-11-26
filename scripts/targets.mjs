@@ -41,8 +41,10 @@ export function manifestFor(target, base, { e2e = false } = {}) {
       gecko: {
         id: GECKO_ID,
         strict_min_version: GECKO_MIN_VERSION,
-        // Nothing is collected by or sent to the developer; the token and documents only go to Quip, at the user's request.
-        data_collection_permissions: { required: ['none'] },
+        // Nothing is sent to the developer. The only data that leaves the browser is the user's Quip access token, which goes to
+        // Quip's own API at the user's request; Mozilla counts that as authentication information, so it is declared, and Firefox
+        // asks for consent at install. The user's documents go only to their own computer.
+        data_collection_permissions: { required: ['authenticationInfo'] },
       },
       gecko_android: { strict_min_version: GECKO_ANDROID_MIN_VERSION },
     };

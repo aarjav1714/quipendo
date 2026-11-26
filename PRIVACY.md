@@ -1,6 +1,6 @@
 # Quipendo privacy policy
 
-*Last updated 25 November 2026.*
+*Last updated 26 November 2026.*
 
 Quipendo copies your own Quip documents to Markdown files on your computer. It has no server, no accounts, no analytics and no advertising. This page says exactly what it handles. It applies to the browser extension (Chrome and other Chromium browsers, Firefox and Safari) and to the command line tool, which share one code base.
 
@@ -9,6 +9,7 @@ Quipendo copies your own Quip documents to Markdown files on your computer. It h
 - **Your Quip access token.** You create it at `quip.com/dev/token` and paste it into Quipendo (the command line reads it from `QUIP_TOKEN` or standard input). It is sent only to Quip's API at `platform.quip.com`, in the `Authorization` header of read requests, and nowhere else. It is never printed or logged.
 - **Your Quip content.** Documents, folders, comments, images, attachments and spreadsheets are fetched from Quip so they can be converted. They pass through your browser (or your terminal) and are written only to the folder you choose, or, if you choose to keep the export in the browser (the only choice in Firefox and Safari), are kept in the browser's own storage until you save them as `.zip` files and clear them. They are not sent to the developer or to anyone else.
 - **Your choices.** Which options are ticked, which folders are selected, a document limit and whether to save to a folder or keep the export in the browser.
+- **The demo.** The extension's *Try the demo* button opens a made-up Quip account that is built into the extension. It needs no token, makes no network request and keeps nothing; exporting it writes made-up files to the folder or stored copy you choose, like any export.
 
 ## Where it is kept
 
@@ -27,6 +28,8 @@ Uninstalling the extension removes everything it stored in the browser. Files al
 - It does not sell or share data, and it does not use data for anything other than the export you asked for.
 - It does not change anything in Quip. Every request is a read. In Chrome and Firefox the browser also blocks any write request (`POST`, `PUT`, `PATCH`, `DELETE`) that the extension itself would send, to any address. Safari has no way to do that for an extension's own requests, so the Safari version relies on its own checks and says so on its page.
 
+The use of information handled by Quipendo adheres to the [Chrome Web Store User Data Policy](https://developer.chrome.com/docs/webstore/program-policies/policies), including the [Limited Use](https://developer.chrome.com/docs/webstore/program-policies/limited-use) requirements: it is used only to provide the export you asked for, is not transferred to anyone else, is not used for advertising, and no person reads it.
+
 ## Permissions
 
 - `storage`: your choices and, only if you ask, the token. (The stored copy of an export uses the browser's IndexedDB, which needs no permission.)
@@ -34,7 +37,7 @@ Uninstalling the extension removes everything it stored in the browser. Files al
 - `declarativeNetRequest` (Chrome and Firefox; the Safari version does not ask for it): one rule that blocks write requests sent by the extension, as described above. It does not touch the pages you visit.
 - Access to `https://platform.quip.com/*`: Quip's API, for the read requests. Chrome grants it at install; Firefox and Safari may ask you to allow it, and you can withdraw it in the browser's settings.
 
-In Firefox the add-on's manifest declares that it collects no data (`data_collection_permissions: none`), which is what this page describes.
+In Firefox the add-on's manifest declares that the one thing that leaves the browser is the user's Quip access token, sent to Quip's own API (`data_collection_permissions: authenticationInfo`), and Firefox asks you to accept that when you install it. Nothing is sent to the developer.
 
 ## Third parties
 

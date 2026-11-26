@@ -20,7 +20,7 @@
     "type": "git",
     "url": "git+https://github.com/aarjav1714/quipendo.git"
   },
-  "author": "Aarjav",
+  "author": "Aarjav (https://github.com/aarjav1714)",
   "funding": {
     "type": "github",
     "url": "https://github.com/sponsors/aarjav1714"
@@ -40,6 +40,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:firefox": "node scripts/build.mjs --target firefox",
+    "build-for-amo": "node scripts/build.mjs --target firefox",
     "build:safari": "node scripts/build.mjs --target safari",
     "build:all": "node scripts/build.mjs --all",
     "build:e2e": "node scripts/build.mjs --e2e",

@@ -22,6 +22,14 @@
 
 Quip is being retired. [Salesforce's notice](https://help.salesforce.com/s/articleView?id=005299603&language=en_US&type=1) says subscriptions cannot be renewed after 1 March 2027 and gives 31 March 2027 as the date after which an instance is no longer accessible; your own deadline is whichever applies to your account. Export while you can still sign in.
 
+## See it first
+
+You do not need a Quip account to see what Quipendo does.
+
+- **Try the demo.** In the extension, press **Try the demo**. It opens a made-up account ("Acme Studio": thirteen documents, five people) inside the page, with no token and no network, so you can preview a document as formatted Markdown, tick folders, and export to a folder or a `.zip` exactly as you would with your own account. Everything in it is invented.
+- **Read what comes out.** [`examples/sample-output/`](examples/sample-output) is what Quipendo wrote for that account. GitHub shows the Markdown rendered, so start with [the project plan](examples/sample-output/Private/Projects/Website%20Relaunch/Website%20Relaunch%20-%20Project%20Plan.md): a status bar, a calendar, a Kanban board, a project tracker, images, an attachment and comments, one of them on highlighted text. [examples/README.md](examples/README.md) says where to look for the rest.
+- **What it converts.** Calendars, Kanban boards, project trackers, process bars, polls, countdowns, videos, Salesforce records and lists, spreadsheets (the `.xlsx` is kept beside the note, so the formulas survive), checklists, tables, code, quotes, images, attachments, slide decks (a note plus a PDF), comments (next to the text they are about) and links between documents.
+
 ## Run it
 
 The extension and the command line are the same exporter, and both only ever send `GET` requests and write the same layout and report. **For the real export use the command line**: nothing has to stay on screen and there is no folder picker. It needs Node 20.19, 22.13 or later and a Quip account that can create an API token (see [Known limits](#known-limits)). The examples write to `~/quip-export`; use a folder of its own (the root and your home folder are refused).
@@ -49,31 +57,37 @@ npm run cli -- --out ~/quip-export --scan-only
 
 ```text
 Connected as Jane Doe (acme.quip.com).
-418 documents in 88 folders would be exported.
-About 851 Quip API requests. How long that takes depends on the speed Quip allows for your account; it is paced automatically.
+13 documents in 9 folders would be exported.
+1 documents you wrote are in no folder (they go under "_Unfiled").
+About 33 Quip API requests. How long that takes depends on the speed Quip allows for your account; it is paced automatically.
 Nothing was written.
 ```
+
+(The examples here are real output, from the made-up demo account described in [See it first](#see-it-first).)
 
 **4. Trial run.** Export one document or folder, then the first few, and open the notes to check them:
 
 ```bash
-npm run cli -- --out ~/quip-export --from https://<your-site>.quip.com/<id>/Reading-Log
+npm run cli -- --out ~/quip-export --from https://<your-site>.quip.com/<id>/Project-Plan
 npm run cli -- --out ~/quip-export --limit 5
 ```
 
-**5. Export everything.** About 10 minutes for 418 documents. On a laptop, `caffeinate -i` keeps it from sleeping:
+**5. Export everything.** Quip paces its API, so expect roughly ten minutes for every few hundred documents. On a laptop, `caffeinate -i` keeps it from sleeping:
 
 ```bash
 caffeinate -i npm run cli -- --out ~/quip-export
 ```
 
 ```text
-[export] Exporting 418 documents…
-[1/418] saved Private/Projects/Project Plan.md
+[export] Exporting 13 documents…
+[1/13] saved Private/Welcome to the Quipendo demo.md
+[2/13] saved Private/Projects/Budget 2026.md
 …
-Done. 418 saved, 0 unchanged, 0 failed of 418 documents.
-Attachments: 215 saved, 0 reused, 0 unavailable. Comments exported: 4.
-Embedded content converted: calendar 8, kanban 2, spreadsheet 82, video 1.
+Done. 13 saved, 0 unchanged, 0 failed of 13 documents.
+Attachments: 6 saved, 0 reused, 0 unavailable. Comments exported: 10.
+Embedded content converted: spreadsheet 6, calendar 2, video 2, process_bar 2, kanban 2, project_tracker 1, countdown 2, salesforce_record 1, salesforce_list 1, poll 1.
+Warning link-outside-export (1): Team Handbook: ZZoutsideDoc
+1 links point to documents outside this export and still use their Quip address.
 Report: _Quip export report.md
 ```
 
