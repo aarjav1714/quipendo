@@ -12,4 +12,4 @@ Everything that can be prepared without your accounts is done and tested: CI run
 
 - **The name.** "Quip" is a Salesforce trademark and the name contains it ([the risk and the fallback](chrome-web-store.md#risks-to-know-about)).
 - **The identifiers that cannot change afterwards.** The Firefox add-on id (`GECKO_ID` in `scripts/targets.mjs`) and the Apple bundle identifier (`io.github.aarjav1714.Quipendo`: it must end in the app name, see [safari.md](safari.md)) are permanent once a store has seen them.
-- **Who the project is.** The licence, the package author, the add-on id and the bundle identifier name Aarjav (`aarjav1714`). The GitHub Sponsors links still point at another account (`.github/FUNDING.yml`, the README, `package.json`).
+- **Who the project is.** The licence, the package author, the add-on id, the bundle identifier and the GitHub Sponsors links all name Aarjav (`aarjav1714`). The Sponsor button and badge lead to the profile page (GitHub redirects there) until that account is approved for GitHub Sponsors; then they work as they are.
