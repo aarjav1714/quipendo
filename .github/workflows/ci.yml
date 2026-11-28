@@ -83,7 +83,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The reviewer's path in BUILDING.md: only the Firefox package is built, and only it is verified.
       - run: npm run build:firefox
+      - run: npm run verify-build -- --target firefox
       - run: npx --yes web-ext@10.8.0 lint -s dist-firefox --warnings-as-errors
 
   safari:

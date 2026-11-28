@@ -251,7 +251,7 @@ The token is kept in browser session storage and disappears when the browser clo
 - Browsers throttle timers in background tabs; waiting out a rate limit may be a little late but is never early.
 - **Firefox and Safari cannot write into a folder you choose**, so the extension keeps the export in the browser's own storage and saves it as `.zip` files. That copy stays on your computer, inside the browser profile and unencrypted, until you clear it or uninstall the extension, and it takes space the browser may limit; for a large account use the command line, or a Chromium browser with a folder.
 - **Safari**: macOS only, Safari 16.4 or later (the iPhone and iPad are not covered), and tested on Safari 27 only. There is no browser-level guard (see above). Safari asks you to allow each site, and, depending on its *File download location* setting, where to save each `.zip`. A developer build needs *Allow unsigned extensions* again after every launch of Safari; an extension other people can install needs Apple's paid developer program ([docs/safari.md](docs/safari.md)).
-- **Firefox**: needs 140 or later, and was tested on stock Firefox 160. The add-on id (`quipendo@aarjav1714.github.io`) is fixed on the first submission to addons.mozilla.org ([docs/firefox-addons.md](docs/firefox-addons.md)).
+- **Firefox**: needs 140 or later, and was tested on stock Firefox 160 and 161. The add-on id (`quipendo@aarjav1714.github.io`) is fixed on the first submission to addons.mozilla.org ([docs/firefox-addons.md](docs/firefox-addons.md)).
 
 ## Support
 

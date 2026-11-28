@@ -17,7 +17,7 @@ Everything needed to fill in the listing is here. Submitting it needs your own d
 
 > Save your Quip folders and documents as Markdown, with calendars, boards and spreadsheets. Read-only, private, free.
 
-**Category:** Productivity. **Language:** English.
+**Category:** Productivity (addons.mozilla.org has no such category: see [firefox-addons.md](firefox-addons.md)). **Language:** English.
 
 **Description:**
 
@@ -88,7 +88,7 @@ The extension needs a Quip personal access token, which a reviewer cannot get wi
 
 ## Risks to know about
 
-- **The name.** "Quip" is a Salesforce trademark and the name Quipendo contains it. Referring to Quip to say what the extension works with is normal, and the description says it is independent, but the store can still ask for a change. If it does, keep "for Quip" in the description and rename the item to something without the word, then update the README and `manifest.json`.
+- **The name.** "Quip" is a Salesforce trademark, and [Salesforce's guidelines](https://www.salesforce.com/company/legal/tmcusageguidelines/) (last updated 12 June 2023) name Quip in their scope. Without written permission they forbid putting "any recognizable portion" of a mark into a product name, and they say a trademark "must not be a part of the offering's name". The *prefix* they allow is referential wording in plain text ("compatible with Quip", "integrates with Quip"), not a name that starts with the mark, so Quipendo is on the wrong side of their rule. The law's test is likelihood of confusion, and [adding a word to a mark does not necessarily avoid it](https://www.bitlaw.com/source/tmep/1207-01-b-iii.html) when the dominant part is the same. Whether anyone enforces this against a free, open-source exporter for a product Salesforce is retiring is not certain either way, but the likeliest outcome of a complaint is a rename request. The stores' own rules point the same way: Apple's [guideline 5.2.1](https://developer.apple.com/app-store/review/guidelines/) is the most direct (no protected third-party trademarks in the app without permission), Chrome's [policy](https://developer.chrome.com/docs/webstore/program-policies/impersonation-and-intellectual-property/) bans trademark infringement, and Mozilla's [policy](https://extensionworkshop.com/documentation/publish/add-on-policies/) requires that add-ons conform to US law. The safe form is a name without the word and a description that says what it works with ("exports your Quip documents to Markdown", plus the attribution already in the README). If you rename, change the README, `manifest.json`, `package.json`, `GECKO_ID` and the Apple bundle identifier **before** the first submission: the last two cannot change afterwards.
 - **The permission warning.** Chrome shows `declarativeNetRequest` as "Block content on any page", which can look alarming for an extension that only reads. The justification above is the explanation; the same text is in the README.
 - **Review.** Extensions that ask for broad permissions get a closer look. This one asks for one host, and the access token never leaves the user's computer except to that host.
 

@@ -7,7 +7,8 @@ const flag = (name) => {
   const at = process.argv.indexOf(name);
   return at === -1 ? undefined : process.argv[at + 1];
 };
-const requested = process.argv.includes('--all') ? targetNames : [parseTarget(flag('--target') ?? 'chrome')];
+// --target wins over --all, which the npm script always passes.
+const requested = flag('--target') ? [parseTarget(flag('--target'))] : process.argv.includes('--all') ? targetNames : ['chrome'];
 
 // Quip's own hosts are the only ones the code ever contacts. These two appear only as text and are never requested:
 // example.com is the address documentation is meant to use (the made-up demo documents mention it), and the OOXML namespace
