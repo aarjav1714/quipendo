@@ -48,7 +48,7 @@ Everything needed to fill in the listing is here. Submitting it needs your own d
 >
 > Just looking? Press "Try the demo": a made-up account with documents of every kind opens inside the page, with no token, no Quip account and no network.
 >
-> A command line version (npx quipendo) uses the same code, and is better for a large export because nothing has to stay on screen.
+> A command-line version built from the same code is in the repository, and suits a large export because nothing has to stay on screen.
 >
 > Limits: Quip's API must be available on your plan, because the token comes from it. Chats are not exported, slide decks become a note plus a PDF, and Quip sites on a dedicated domain (such as customer.onquip.com) are not supported yet.
 >
@@ -95,7 +95,7 @@ The extension needs a Quip personal access token, which a reviewer cannot get wi
 ## Checklist
 
 - [ ] Developer account registered and verified
-- [ ] `quipendo` published to npm (the description mentions `npx quipendo`), or that sentence removed
+- [ ] If `quipendo` gets published to npm, the description can say `npx quipendo` (it is not on npm yet, so it does not)
 - [ ] Package uploaded (`manifest.json` at the top of the zip; version matches the tag)
 - [ ] Listing text, category and language filled in
 - [ ] Store icon, five screenshots, small tile (and marquee) uploaded

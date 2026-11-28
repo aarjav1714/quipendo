@@ -50,7 +50,7 @@ git clone https://github.com/aarjav1714/quipendo && cd quipendo
 npm ci
 ```
 
-Once a release is published you can skip this: `npx quipendo --out ~/quip-export` runs the tool with nothing to clone, and the extension is a zip for Chrome and one for Firefox on the [Releases page](https://github.com/aarjav1714/quipendo/releases). The examples below use `npm run cli --`; `npx quipendo` takes the same options.
+The extension is a zip for Chrome, one for Firefox and one for Safari on the [Releases page](https://github.com/aarjav1714/quipendo/releases), so there is nothing to clone for it. The command line tool is not on npm yet (the release workflow publishes it when an `NPM_TOKEN` secret exists); once it is, `npx quipendo --out ~/quip-export` runs it with nothing to clone. The examples below use `npm run cli --`, and `npx quipendo` will take the same options.
 
 **2. Get a token.** While signed in to Quip, open `https://<your-site>.quip.com/dev/token` (or `quip.com/dev/token`), click **Get Personal Access Token** and copy it. Give it to your shell without echoing it or leaving it in your history:
 
