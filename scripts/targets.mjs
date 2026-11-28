@@ -11,7 +11,7 @@ export const TARGETS = {
 export const GECKO_ID = 'quipendo@aarjav1714.github.io';
 /** Firefox 140 is the first release that reads data_collection_permissions, which new add-ons must declare. */
 export const GECKO_MIN_VERSION = '140.0';
-/** On Android that key arrived two releases later. Android is not tested; this only keeps the declaration valid. */
+/** On Android that key arrived two releases later. Declaring it also makes addons.mozilla.org list the add-on for Firefox for Android, where it is untested. */
 export const GECKO_ANDROID_MIN_VERSION = '142.0';
 /** Safari 16.4 is the first release with every extension and web API the page uses. Only Safari 27 has been tried. */
 export const SAFARI_MIN_VERSION = '16.4';
