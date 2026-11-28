@@ -5,19 +5,18 @@ Everything needed to fill in the listing is here. Submitting it needs your own d
 ## Before you start
 
 1. Register at the [developer dashboard](https://chrome.google.com/webstore/devconsole). There is a one-time registration fee, and Google's page lists the [supported countries](https://developer.chrome.com/docs/webstore/register). Use an email you check often: review messages and policy warnings go there, and it cannot be changed later.
-2. Publish the [privacy policy](../PRIVACY.md) at a public address (its address on GitHub works once it is pushed): `https://github.com/aarjav1714/quipendo/blob/main/PRIVACY.md`.
-3. Get the package: the `quipendo-chrome-<version>.zip` attached to a [release](https://github.com/aarjav1714/quipendo/releases) (the release workflow builds it from a version tag), or build it yourself with `npm run build` and zip the *contents* of `dist/`, so `manifest.json` is at the top of the zip.
-4. The listing images are in [`assets/store/`](../assets/store). `npm run store-assets` rebuilds them from the real extension page running its built-in demo, and `npm run icons` rebuilds the store icon.
+2. Set up the account before the first upload. Turn on **2-Step Verification** for the Google account: until it is on, the upload fails with "Enabling 2 step verification on your account is required for security purposes". Then, in *Settings*, add a **contact email** and verify it from the mailbox (it is shown publicly, and the dashboard blocks publishing without it) and make the **trader declaration**. A *trader* account shows the name, address and phone number of the verified Google payments profile on the public listing, so check what that profile holds; a free personal project is normally a non-trader. The publisher display name, also public, starts out as the account's email address.
+3. Publish the [privacy policy](../PRIVACY.md) at a public address (its address on GitHub works once it is pushed): `https://github.com/aarjav1714/quipendo/blob/main/PRIVACY.md`.
+4. Get the package: the `quipendo-chrome-<version>.zip` attached to a [release](https://github.com/aarjav1714/quipendo/releases) (the release workflow builds it from a version tag), or build it yourself with `npm run build` and zip the *contents* of `dist/`, so `manifest.json` is at the top of the zip.
+5. The listing images are in [`assets/store/`](../assets/store). `npm run store-assets` rebuilds them from the real extension page running its built-in demo, and `npm run icons` rebuilds the store icon.
 
 ## Listing
 
-**Name:** Quipendo
+**Name:** Quipendo (from the manifest)
 
-**Summary** (the limit is 132 characters; this is 116):
+**Summary:** the dashboard takes it from `description` in [`extension/manifest.json`](../extension/manifest.json) and shows it read-only (107 characters; the limit is 132). There is no field to paste it into.
 
-> Save your Quip folders and documents as Markdown, with calendars, boards and spreadsheets. Read-only, private, free.
-
-**Category:** Productivity (addons.mozilla.org has no such category: see [firefox-addons.md](firefox-addons.md)). **Language:** English.
+**Category:** Productivity › Tools (addons.mozilla.org has no such category: see [firefox-addons.md](firefox-addons.md)). **Language:** English.
 
 **Description:**
 
@@ -65,9 +64,9 @@ Everything needed to fill in the listing is here. Submitting it needs your own d
 - `declarativeNetRequest`: Installs one dynamic rule that blocks every POST, PUT, PATCH and DELETE request the extension itself sends, so it can never change anything in Quip. It does not block, redirect or modify pages the user visits. (Chrome describes this permission to users as "Block content on any page"; that is the general wording for the API.)
 - Host permission `https://platform.quip.com/*`: Quip's API. Used only for read (GET) requests for the user's documents, folders, comments and files.
 
-**Remote code:** No. All code is in the package, and the extension's content security policy allows scripts from the extension only.
+**Remote code:** the dashboard did not ask (28 Nov 2026). The answer would be No: all code is in the package, and the extension's content security policy allows scripts from the extension only.
 
-**Data usage:** tick *Authentication information* (the user's Quip access token, used only to read from Quip). The user's Quip content is handled on the user's computer only; if the dashboard asks about *Website content* or *Personal communications*, the same applies: it is read from Quip at the user's request, written to the user's chosen folder, and not sent to the developer or anyone else. Then tick all three certifications: no selling or transferring of user data outside approved uses, no use unrelated to the single purpose, and no use for creditworthiness or lending.
+**Data usage:** tick *Personally identifiable information* (the names of the user and of the people in their documents, and the account's email), *Authentication information* (the Quip access token), *Personal communications* (comments and conversation) and *Website content* (the documents). Google's [user data FAQ](https://developer.chrome.com/docs/webstore/program-policies/user-data-faq) says handling must be disclosed even when the data stays on the user's computer (question 3), and lists reading documents from a user's cloud service as handling (question 2). All of it is read from Quip at the user's request, written to the user's chosen folder, and not sent to the developer or anyone else. The three certifications under the list (no selling or transferring of user data outside approved uses, no use unrelated to the single purpose, no use for creditworthiness or lending) are the developer's own attestation, as is the item-level statement that data usage complies with the Developer Program Policies, so the developer ticks them.
 
 **Privacy policy URL:** `https://github.com/aarjav1714/quipendo/blob/main/PRIVACY.md`
 
@@ -84,7 +83,11 @@ The tiles carry the QuipEnd! wordmark; the listing's name field stays plain text
 
 ## Test instructions for the reviewer
 
-The extension needs a Quip personal access token, which a reviewer cannot get without a Quip account, so it has a built-in demo with made-up documents that needs no token and makes no network request. Paste the *Chrome Web Store, Test instructions* block from [reviewing.md](reviewing.md#ready-to-paste-text) into the *Test instructions* field; the same file has the full steps for anyone who wants to check the extension by hand. A listing the reviewer cannot try is the likeliest reason for a rejection.
+The extension needs a Quip personal access token, which a reviewer cannot get without a Quip account, so it has a built-in demo with made-up documents that needs no token and makes no network request. Paste the *Chrome Web Store, Test instructions* block from [reviewing.md](reviewing.md#ready-to-paste-text) into *Additional instructions* on the dashboard's *Test instructions* page (500 characters at most; leave *Username* and *Password* empty, since nothing needs signing in to); the same file has the full steps for anyone who wants to check the extension by hand. A listing the reviewer cannot try is the likeliest reason for a rejection.
+
+## Distribution tab
+
+The defaults are what is wanted: free of charge, public, all regions.
 
 ## Risks to know about
 

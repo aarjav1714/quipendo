@@ -21,9 +21,9 @@ For store reviewers, and for anyone who wants to see it work before connecting a
 
 ## Ready-to-paste text
 
-**Chrome Web Store, Test instructions**
+**Chrome Web Store, Test instructions** (the field takes at most 500 characters)
 
-> No Quip account is needed. Click the Quipendo toolbar icon. On the page that opens, press "Try the demo" in step 1: it opens a made-up account inside the page (a banner says so), with no token and no network. Press "Preview" to see a document with a calendar, Kanban board, project tracker and process bar, formatted, and see the plain Markdown on the "Markdown" tab. Then in step 2 choose "Keep it in this browser", press "Scan" (13 documents), "Start export", then "Save as .zip": 13 Markdown notes with attachments are saved. They match examples/sample-output in the source repository. With a real Quip token the only requests are GETs to platform.quip.com. Steps: https://github.com/aarjav1714/quipendo/blob/main/docs/reviewing.md
+> No account or credentials needed. Click the Quipendo toolbar icon. On the page that opens, press "Try the demo" in step 1: a made-up account runs inside the page, with no token and no network. Press "Preview" to see a sample document (calendar, Kanban board, tracker) and its Markdown tab. Then choose "Keep it in this browser", press "Scan", "Start export" and "Save as .zip": 13 notes. Steps: https://github.com/aarjav1714/quipendo/blob/main/docs/reviewing.md
 
 **Firefox Add-ons, Notes for reviewers**
 
